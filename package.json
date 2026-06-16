@@ -26,9 +26,8 @@
       { "command": "claudeMultiUsage.removeAccount", "title": "Claude: 계정 제거" }
     ],
     "icons": {
-      "quokka-0": { "description": "Quokka mascot — bob 0", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E001" } },
-      "quokka-1": { "description": "Quokka mascot — bob 1", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E002" } },
-      "quokka-2": { "description": "Quokka mascot — bob 2", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E003" } }
+      "quokka-0": { "description": "Quokka mascot — legs short", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E001" } },
+      "quokka-1": { "description": "Quokka mascot — legs long", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E002" } }
     },
     "configuration": {
       "title": "Claude Multi-Account Usage",
@@ -80,7 +79,7 @@
           "description": "숨쉬기 한 주기(ms). 프레임 수로 나눠 전환"
         },
         "claudeMultiUsage.characterFrames": {
-          "type": "array", "items": { "type": "string" }, "default": ["$(quokka-0)", "$(quokka-1)", "$(quokka-2)", "$(quokka-1)"],
+          "type": "array", "items": { "type": "string" }, "default": ["$(quokka-0)", "$(quokka-1)"],
           "description": "마스코트 애니메이션 프레임(픽셀 쿼카 위아래 2프레임 기본). 원하는 글자/codicon/이모지로 교체 가능 (예: [\"▃\",\"▆\"])"
         },
         "claudeMultiUsage.launchCommand": {

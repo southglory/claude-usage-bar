@@ -108,7 +108,7 @@ class Bar {
     this.panel = null;   // 대시보드 웹뷰(싱글턴)
     this._snap = [];     // 대시보드용 최신 스냅샷
     this.showChar = true;
-    this.frames = ['$(quokka-0)', '$(quokka-1)', '$(quokka-2)', '$(quokka-1)'];
+    this.frames = ['$(quokka-0)', '$(quokka-1)'];
   }
 
   config() {
@@ -125,7 +125,7 @@ class Bar {
       showChar: c.get('showCharacter', true),
       anim: c.get('enableAnimation', true),
       animMs: c.get('animationPeriodMs', 2000),
-      frames: c.get('characterFrames', ['$(quokka-0)', '$(quokka-1)', '$(quokka-2)', '$(quokka-1)']),
+      frames: c.get('characterFrames', ['$(quokka-0)', '$(quokka-1)']),
       launchCommand: c.get('launchCommand', 'claude'),
       clickAction: c.get('clickAction', 'refresh'),
     };
