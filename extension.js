@@ -202,6 +202,92 @@ function remain(epochSec) {
   return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
 }
 
+/** Decode a Claude Code project dir (cwd with `/`, `\`, `:`, `_` all replaced by '-')
+ *  to a short label. We can't recover which '-' was an underscore, so show the last
+ *  two segments (e.g. "AXO-enterprise-agents-AXO-leader" -> "AXO-leader"). */
+function decodeProject(name) {
+  const parts = String(name).split('-').filter(Boolean);
+  return parts.length ? parts.slice(-2).join('-') : String(name);
+}
+
+/** Scan <dir>/projects/**/*.jsonl and aggregate token cost by time window, project,
+ *  day and hour. Cost = token counts × pricing — the same method ccusage / long-910
+ *  use. It is the API-equivalent dollar value of the tokens (one price tier for all
+ *  models), NOT your real subscription bill. Token counts are exact. Heavy: caller
+ *  must throttle/cache. Only files touched within 30 days are read. */
+function scanCost(dir, pricing, now) {
+  const root = path.join(dir, 'projects');
+  const res = {
+    cost1h: 0, cost5h: 0, costToday: 0, cost7d: 0, cost30d: 0,
+    tok5h: { in: 0, out: 0, cr: 0, cc: 0 },
+    byProject: {}, byDay: {}, byHour: new Array(24).fill(0),
+    first5hTs: 0, lastTs: 0,
+  };
+  let projects;
+  try { projects = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return res; }
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0);
+  const startTodayMs = startToday.getTime();
+  const H = 3600000, ms5h = 5 * H, ms7d = 7 * 24 * H, ms30d = 30 * 24 * H;
+  const costOf = (u) =>
+    ((u.input_tokens || 0) * pricing.in + (u.output_tokens || 0) * pricing.out
+      + (u.cache_read_input_tokens || 0) * pricing.cr
+      + (u.cache_creation_input_tokens || 0) * pricing.cc) / 1e6;
+  for (const pd of projects) {
+    if (!pd.isDirectory()) continue;
+    const proj = decodeProject(pd.name);
+    const pdir = path.join(root, pd.name);
+    let files;
+    try { files = fs.readdirSync(pdir); } catch (e) { continue; }
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      const fp = path.join(pdir, f);
+      let st;
+      try { st = fs.statSync(fp); } catch (e) { continue; }
+      if (now - st.mtimeMs > ms30d) continue;
+      let text;
+      try { text = fs.readFileSync(fp, 'utf8'); } catch (e) { continue; }
+      let start = 0;
+      while (start < text.length) {
+        let end = text.indexOf('\n', start);
+        if (end < 0) end = text.length;
+        const line = text.slice(start, end);
+        start = end + 1;
+        if (!line) continue;
+        let j;
+        try { j = JSON.parse(line); } catch (e) { continue; }
+        const u = (j.message && j.message.usage) || j.usage;
+        if (!u) continue;
+        const ts = Date.parse(j.timestamp || (j.message && j.message.timestamp) || '');
+        if (!ts) continue;
+        const c = costOf(u);
+        const age = now - ts;
+        if (age <= ms30d) res.cost30d += c;
+        if (age <= ms7d) res.cost7d += c;
+        if (ts >= startTodayMs) res.costToday += c;
+        if (age <= H) res.cost1h += c;
+        if (age <= ms5h) {
+          res.cost5h += c;
+          res.tok5h.in += u.input_tokens || 0;
+          res.tok5h.out += u.output_tokens || 0;
+          res.tok5h.cr += u.cache_read_input_tokens || 0;
+          res.tok5h.cc += u.cache_creation_input_tokens || 0;
+          if (!res.first5hTs || ts < res.first5hTs) res.first5hTs = ts;
+        }
+        const p = res.byProject[proj] || (res.byProject[proj] = { today: 0, d7: 0, d30: 0 });
+        if (age <= ms30d) p.d30 += c;
+        if (age <= ms7d) p.d7 += c;
+        if (ts >= startTodayMs) p.today += c;
+        const d = new Date(ts);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        res.byDay[key] = (res.byDay[key] || 0) + c;
+        res.byHour[d.getHours()] += c;
+        if (ts > res.lastTs) res.lastTs = ts;
+      }
+    }
+  }
+  return res;
+}
+
 class Bar {
   constructor() {
     /** @type {vscode.StatusBarItem[]} */
@@ -214,6 +300,7 @@ class Bar {
     this.showChar = true;
     this.frames = FALLBACK_FRAMES.slice();
     this._api = {};      // dir -> { data, updatedAt, ts, pending, error } (API-fetched usage)
+    this._cost = {};     // dir -> { data, ts, pending } (scanned token cost)
   }
 
   config() {
@@ -234,7 +321,28 @@ class Bar {
       launchCommand: c.get('launchCommand', 'claude'),
       clickAction: c.get('clickAction', 'refresh'),
       apiFallback: c.get('fetchUsageViaApi', true),
+      pricing: {
+        in: c.get('pricing.inputPerMillion', 3),
+        out: c.get('pricing.outputPerMillion', 15),
+        cr: c.get('pricing.cacheReadPerMillion', 0.3),
+        cc: c.get('pricing.cacheCreatePerMillion', 3.75),
+      },
+      dailyBudget: c.get('dailyBudget', 0),
     };
+  }
+
+  /** Throttled background token-cost scan for an account. Stores the result in
+   *  this._cost[dir] and re-renders the dashboard when done. */
+  ensureCost(dir, pricing, interval) {
+    const slot = this._cost[dir] || (this._cost[dir] = {});
+    if (slot.pending) return;
+    if (slot.ts && Date.now() - slot.ts < Math.max(30000, interval)) return; // throttle
+    slot.pending = true;
+    Promise.resolve()
+      .then(() => scanCost(dir, pricing, Date.now()))
+      .then((data) => { slot.data = data; })
+      .catch((e) => { slot.error = (e && e.message) || String(e); })
+      .finally(() => { slot.pending = false; slot.ts = Date.now(); this.updateDashboard(); });
   }
 
   /** Throttled background API fetch for an account with no cache file. Stores the
@@ -481,7 +589,7 @@ class Bar {
         md.appendMarkdown(this.menuLinks(idx));
         item.tooltip = md;
         item.show();
-        snap.push({ idx, label, none: true, error: slot && slot.error });
+        snap.push({ idx, label, dir, none: true, error: slot && slot.error });
         return;
       }
 
@@ -492,18 +600,33 @@ class Bar {
       const blocked = data.limitStatus && data.limitStatus !== 'allowed';
       const lvl = Math.max(typeof u5 === 'number' ? u5 : 0, typeof u7 === 'number' ? u7 : 0);
 
-      // Progress-bar form: "personal ██████▌░ 52% · 36%" (countdown when exhausted/blocked).
+      // Progress-bar form: "personal ██████▒ 52% · 36%". When a window is exhausted
+      // (or blocked) the bar flips to a reset countdown for whichever window is full —
+      // including 7d, even though the bar normally tracks 5h.
+      const u5full = typeof u5 === 'number' && u5 >= 1;
+      const u7full = typeof u7 === 'number' && u7 >= 1;
       let body;
-      if (blocked || (typeof u5 === 'number' && u5 >= 1)) {
-        body = `${label} ${bar(1, barLen)} reset ${remain(data.reset5hAt)}`;
+      if (blocked || u5full) {
+        body = `${label} ${bar(1, barLen)} 5h reset ${remain(data.reset5hAt)}`;
+      } else if (u7full) {
+        body = `${label} ${bar(1, barLen)} 7d reset ${remain(data.reset7dAt)}`;
       } else {
         body = `${label} ${bar(u5, barLen)} ${p5 == null ? '?' : p5 + '%'}`;
         if (show7d && p7 != null) body += ` · ${p7}%`;
       }
       item.__body = body;
       item.text = deco(body);
-      item.color = blocked ? new vscode.ThemeColor('charts.red') : colorFor(lvl, warnAt, critAt);
-      item.backgroundColor = undefined;
+      // Color reflects the WORSE of 5h/7d. At critical (>= critAt or blocked) add a bold
+      // background badge so a maxed 7d is unmissable even though the bar shows 5h.
+      const critical = blocked || lvl >= critAt;
+      item.color = critical
+        ? new vscode.ThemeColor('statusBarItem.errorForeground')
+        : colorFor(lvl, warnAt, critAt);
+      // Badge only at critical (a warn-tier badge from ~50% would be too noisy);
+      // the warn tier just tints the text yellow.
+      item.backgroundColor = critical
+        ? new vscode.ThemeColor('statusBarItem.errorBackground')
+        : undefined;
 
       const md = new vscode.MarkdownString();
       md.isTrusted = true;
@@ -521,7 +644,7 @@ class Bar {
       item.tooltip = md;
       item.show();
       snap.push({
-        idx, label, p5, p7, blocked, source,
+        idx, label, dir, p5, p7, blocked, source,
         status: data.limitStatus, reset5hAt: data.reset5hAt, reset7dAt: data.reset7dAt, updatedAt,
       });
     });
@@ -568,6 +691,10 @@ class Bar {
       else if (m.type === 'login') this.loginAccount(m.idx);
       else if (m.type === 'add') this.addFromDashboard(m.label, m.dir, m.login);
       else if (m.type === 'remove') this.removeByIndex(m.idx);
+      else if (m.type === 'openSettings') {
+        vscode.commands.executeCommand('workbench.action.openSettings',
+          m.query || '@ext:southglory.claude-multi-usage');
+      }
       else if (m.type === 'openCache') {
         const f = this.items[m.idx] && this.items[m.idx].__file;
         if (f) vscode.window.showTextDocument(vscode.Uri.file(f));
@@ -577,46 +704,141 @@ class Bar {
   }
 
   updateDashboard() {
-    if (this.panel) this.panel.webview.html = this.dashHtml(this._snap || []);
+    if (!this.panel) return;
+    const { pricing, interval, dailyBudget } = this.config();
+    (this._snap || []).forEach((s) => { if (s.dir) this.ensureCost(s.dir, pricing, interval); });
+    this.panel.webview.html = this.dashHtml(this._snap || [], pricing, dailyBudget);
   }
 
-  dashHtml(snap) {
+  dashHtml(snap, pricing, dailyBudget) {
     const esc = (s) => String(s == null ? '' : s)
       .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const money = (x) => '$' + (x || 0).toFixed(2);
+    const tok = (n) => (n == null ? '0' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n));
     const col = (p) => p == null ? 'var(--vscode-descriptionForeground)'
       : p >= 90 ? 'var(--vscode-charts-red)' : p >= 50 ? 'var(--vscode-charts-yellow)' : 'var(--vscode-charts-green)';
-    const barRow = (p, lab, reset) => {
+    const now = Date.now();
+
+    const usageRow = (lab, p, reset) => {
       const w = Math.max(0, Math.min(100, p || 0));
-      return `<div class="barrow"><span class="lab">${lab}</span><div class="track"><div class="fill" style="width:${w}%;background:${col(p)}"></div></div>`
-        + `<span class="pct" style="color:${col(p)}">${p == null ? '?' : p + '%'}</span><span class="rst">reset ${esc(reset)}</span></div>`;
+      return `<div class="barrow"><span class="lab">${lab}</span>`
+        + `<div class="track"><div class="fill" style="width:${w}%;background:${col(p)}"></div></div>`
+        + `<span class="pct" style="color:${col(p)}">${p == null ? '?' : p + '%'}</span>`
+        + `<span class="rst">resets in ${esc(remain(reset))}</span></div>`;
     };
-    const card = (s) => s.none
-      ? `<div class="card"><div class="hd">${esc(s.label)}</div>`
-        + `<div class="meta">No usage cache yet — log in once with this account to create it.</div>`
-        + `<div class="btns"><button onclick="post('login',${s.idx})">Log in</button>`
-        + `<button class="sec" onclick="post('launch',${s.idx})">Open terminal</button>`
-        + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></div>`
-      : `<div class="card"><div class="hd">${esc(s.label)}${s.blocked ? ' <span class="blocked">limit reached</span>' : ''}</div>`
-        + barRow(s.p5, '5h', remain(s.reset5hAt)) + barRow(s.p7, '7d', remain(s.reset7dAt))
-        + `<div class="meta">Status ${esc(s.status || '?')}${s.updatedAt ? ' · updated ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>`
-        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button>`
-        + `<button class="sec" onclick="post('login',${s.idx})">Log in</button>`
-        + `<button class="sec" onclick="post('openCache',${s.idx})">Cache file</button>`
-        + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></div>`;
+    const tile = (label, val) => `<div class="tile"><div class="tl">${label}</div><div class="tv">${val}</div></div>`;
+
+    // Last-30-day history sparkline + avg-by-hour bars from scanned cost.
+    const dayKeys = () => {
+      const out = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now - i * 86400000);
+        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      }
+      return out;
+    };
+    const spark = (byDay) => {
+      const keys = dayKeys();
+      const vals = keys.map((k) => (byDay && byDay[k]) || 0);
+      const max = Math.max(0.01, ...vals);
+      return `<div class="spark">` + vals.map((v, i) =>
+        `<div class="sb" title="${esc(keys[i])}: ${money(v)}" style="height:${Math.max(2, (v / max) * 100)}%"></div>`).join('') + `</div>`;
+    };
+    const hours = (byHour) => {
+      const max = Math.max(0.01, ...(byHour || []));
+      return `<div class="spark">` + (byHour || []).map((v, i) =>
+        `<div class="sb" title="${i}:00 — ${money(v)}" style="height:${Math.max(2, (v / max) * 100)}%"></div>`).join('') + `</div>`;
+    };
+
+    const noneCard = (s) =>
+      `<details class="card"><summary class="hd">${esc(s.label)} <span class="dim">— no usage yet</span></summary>`
+      + `<div class="meta">No cache and/or no usage logged. Log in, then run a session.</div>`
+      + `<div class="btns"><button onclick="post('login',${s.idx})">Log in</button>`
+      + `<button class="sec" onclick="post('launch',${s.idx})">Open terminal</button>`
+      + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></details>`;
+
+    const card = (s) => {
+      if (s.none) return noneCard(s);
+      const cost = (this._cost[s.dir] && this._cost[s.dir].data) || null;
+      const scanning = this._cost[s.dir] && this._cost[s.dir].pending && !cost;
+      const burn = cost && cost.first5hTs
+        ? cost.cost5h / Math.max(0.1, (now - cost.first5hTs) / 3600000) : 0;
+      const t = cost ? cost.tok5h : { in: 0, out: 0, cr: 0, cc: 0 };
+      const projRows = cost
+        ? Object.entries(cost.byProject).sort((a, b) => b[1].d30 - a[1].d30).slice(0, 8)
+          .map(([name, p]) => `<tr><td>${esc(name)}</td><td>${money(p.today)}</td><td>${money(p.d7)}</td><td>${money(p.d30)}</td></tr>`).join('')
+        : '';
+      const summary = `${esc(s.label)} <span class="dim">${s.p5 == null ? '?' : s.p5 + '%'} · ${s.p7 == null ? '?' : s.p7 + '%'}`
+        + `${cost ? ' · ' + money(cost.costToday) + ' today' : ''}</span>${s.blocked ? ' <span class="blocked">limit</span>' : ''}`;
+
+      return `<details class="card" open><summary class="hd">${summary}</summary>
+
+        <div class="sec-h">Current Usage <span class="src">${s.source === 'api' ? 'via API' : 'via cache'}</span></div>
+        ${usageRow('5h', s.p5, s.reset5hAt)}
+        ${usageRow('7d', s.p7, s.reset7dAt)}
+
+        <div class="sec-h">Token Cost <span class="src">est. API value</span></div>
+        ${cost ? `<div class="tiles">${tile('5h', money(cost.cost5h))}${tile('Today', money(cost.costToday))}${tile('7 days', money(cost.cost7d))}${tile('Month (est.)', money(cost.cost30d))}</div>`
+          : `<div class="meta">${scanning ? 'Scanning session logs…' : 'No session logs found.'}</div>`}
+
+        ${cost ? `<details class="sub"><summary>Token breakdown (5h)</summary>
+          <table class="tbl"><tr><th>Type</th><th>Tokens</th><th>Cost</th></tr>
+          <tr><td>Input</td><td>${tok(t.in)}</td><td>${money(t.in * pricing.in / 1e6)}</td></tr>
+          <tr><td>Output</td><td>${tok(t.out)}</td><td>${money(t.out * pricing.out / 1e6)}</td></tr>
+          <tr><td>Cache read</td><td>${tok(t.cr)}</td><td>${money(t.cr * pricing.cr / 1e6)}</td></tr>
+          <tr><td>Cache create</td><td>${tok(t.cc)}</td><td>${money(t.cc * pricing.cc / 1e6)}</td></tr></table>
+        </details>` : ''}
+
+        ${projRows ? `<div class="sec-h">By project</div>
+          <table class="tbl"><tr><th>Project</th><th>Today</th><th>7d</th><th>30d</th></tr>${projRows}</table>` : ''}
+
+        <div class="sec-h">Prediction</div>
+        <div class="meta">Burn rate <b>${money(burn)}/hr</b>${s.reset5hAt ? ` · ⚠ 5h limit resets in ~${esc(remain(s.reset5hAt))} (at ${esc(resetAt(s.reset5hAt))})` : ''}
+          ${dailyBudget && cost ? ` · budget ${money(dailyBudget)}/day — used ${Math.round((cost.costToday / dailyBudget) * 100)}%` : ''}</div>
+
+        ${cost ? `<div class="sec-h">Usage history (30 days)</div>${spark(cost.byDay)}
+          <div class="sec-h">Avg cost by hour</div>${hours(cost.byHour)}` : ''}
+
+        <div class="sec-h">Pricing &amp; settings <span class="src">per 1M tokens</span></div>
+        <div class="meta">in ${money(pricing.in)} · out ${money(pricing.out)} · cache-read ${money(pricing.cr)} · cache-create ${money(pricing.cc)}</div>
+
+        <div class="btns" style="margin-top:8px">
+          <button onclick="post('launch',${s.idx})">Open terminal</button>
+          <button class="sec" onclick="post('login',${s.idx})">Log in</button>
+          <button class="sec" onclick="post('openCache',${s.idx})">Cache file</button>
+          <button class="sec" onclick="postq('openSettings','@ext:southglory.claude-multi-usage pricing')">Edit pricing</button>
+          <button class="sec" onclick="post('remove',${s.idx})">Remove</button>
+        </div>
+      </details>`;
+    };
+
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:14px 18px;}
       .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
       h2{margin:0;font-size:16px;}
-      .card{border:1px solid var(--vscode-panel-border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--vscode-editorWidget-background);}
-      .hd{font-weight:700;font-size:14px;margin-bottom:8px;}
+      .card{border:1px solid var(--vscode-panel-border);border-radius:10px;padding:10px 14px;margin-bottom:10px;background:var(--vscode-editorWidget-background);}
+      summary.hd{font-weight:700;font-size:13px;cursor:pointer;list-style:revert;}
+      .dim{color:var(--vscode-descriptionForeground);font-weight:400;font-size:12px;}
       .blocked{color:var(--vscode-charts-red);font-size:11px;border:1px solid var(--vscode-charts-red);border-radius:6px;padding:1px 6px;}
+      .sec-h{font-weight:600;font-size:12px;margin:12px 0 5px;border-top:1px solid var(--vscode-panel-border);padding-top:8px;}
+      .src{color:var(--vscode-descriptionForeground);font-weight:400;font-size:11px;}
       .barrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px;}
       .lab{width:22px;color:var(--vscode-descriptionForeground);}
       .track{flex:1;height:10px;border-radius:6px;background:var(--vscode-input-background);overflow:hidden;}
       .fill{height:100%;border-radius:6px;transition:width .3s;}
       .pct{width:40px;text-align:right;font-variant-numeric:tabular-nums;}
-      .rst{width:104px;color:var(--vscode-descriptionForeground);font-size:11px;}
-      .meta{color:var(--vscode-descriptionForeground);font-size:11px;margin:6px 0 8px;}
+      .rst{width:120px;color:var(--vscode-descriptionForeground);font-size:11px;}
+      .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+      .tile{background:var(--vscode-input-background);border-radius:8px;padding:8px 10px;}
+      .tl{color:var(--vscode-descriptionForeground);font-size:11px;}
+      .tv{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+      .tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;}
+      .tbl th{text-align:left;color:var(--vscode-descriptionForeground);font-weight:500;border-bottom:1px solid var(--vscode-panel-border);}
+      .tbl td,.tbl th{padding:3px 6px;}.tbl td:not(:first-child),.tbl th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;}
+      .sub{margin-top:6px;font-size:12px;}.sub summary{cursor:pointer;color:var(--vscode-descriptionForeground);}
+      .spark{display:flex;align-items:flex-end;gap:2px;height:46px;margin:4px 0;}
+      .sb{flex:1;background:var(--vscode-charts-blue,#4e94ce);border-radius:2px 2px 0 0;min-height:2px;}
+      .meta{color:var(--vscode-descriptionForeground);font-size:12px;margin:4px 0;}
       .btns{display:flex;gap:6px;flex-wrap:wrap;}
       button{font-family:inherit;font-size:12px;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground);}
       button.sec{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);}
@@ -626,8 +848,9 @@ class Bar {
       .add input{flex:1;font-family:inherit;font-size:12px;padding:5px 8px;border-radius:6px;
         border:1px solid var(--vscode-input-border,transparent);background:var(--vscode-input-background);color:var(--vscode-input-foreground);}
       .hint{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:6px;}
+      .foot{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:8px;}
     </style></head><body>
-      <div class="top"><h2>Claude Usage (multi-account)</h2><button onclick="post('refresh')">Refresh</button></div>
+      <div class="top"><h2>Claude Code Usage</h2><button onclick="post('refresh')">↻ Refresh</button></div>
       ${snap.length ? snap.map(card).join('') : '<div class="empty">No accounts yet — add one below.</div>'}
       <div class="add">
         <div class="hd">Add account</div>
@@ -639,12 +862,13 @@ class Bar {
           <button onclick="add(true)">Add &amp; log in</button>
           <button class="sec" onclick="add(false)">Add only</button>
         </div>
-        <div class="hint">The label is shown as-is (no parsing). A new directory with no
-          login opens a terminal so you can sign in the first time.</div>
+        <div class="hint">The label is shown as-is (no parsing). A new directory with no login opens a terminal so you can sign in the first time.</div>
       </div>
+      <div class="foot">Cost = token counts × pricing (API-equivalent estimate, not your subscription bill). Token counts are exact; logs scanned for the last 30 days.</div>
       <script>
         const v=acquireVsCodeApi();
         function post(type,idx){v.postMessage({type,idx});}
+        function postq(type,query){v.postMessage({type,query});}
         function add(login){
           const lab=document.getElementById('lab').value;
           const dir=document.getElementById('dir').value;

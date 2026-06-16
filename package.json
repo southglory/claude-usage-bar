@@ -2,7 +2,7 @@
   "name": "claude-multi-usage",
   "displayName": "Claude Multi-Account Usage",
   "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icon": "icon.png",
   "publisher": "southglory",
   "author": "southglory",
@@ -85,6 +85,26 @@
         "claudeMultiUsage.characterFrames": {
           "type": "array", "items": { "type": "string" }, "default": ["$(quokka-0)", "$(quokka-1)"],
           "description": "Mascot animation frames (defaults to the 2-frame pixel quokka up/down breathing). Replace with any text/codicon/emoji you like (e.g. [\"▃\",\"▆\"])."
+        },
+        "claudeMultiUsage.pricing.inputPerMillion": {
+          "type": "number", "default": 3,
+          "description": "Cost estimate: USD per 1M input tokens (default = Sonnet API price)"
+        },
+        "claudeMultiUsage.pricing.outputPerMillion": {
+          "type": "number", "default": 15,
+          "description": "Cost estimate: USD per 1M output tokens"
+        },
+        "claudeMultiUsage.pricing.cacheReadPerMillion": {
+          "type": "number", "default": 0.3,
+          "description": "Cost estimate: USD per 1M cache-read tokens"
+        },
+        "claudeMultiUsage.pricing.cacheCreatePerMillion": {
+          "type": "number", "default": 3.75,
+          "description": "Cost estimate: USD per 1M cache-creation tokens"
+        },
+        "claudeMultiUsage.dailyBudget": {
+          "type": "number", "default": 0,
+          "description": "Optional daily spend budget (USD). 0 = off. When set, the dashboard shows how much of today's budget is used."
         },
         "claudeMultiUsage.launchCommand": {
           "type": "string", "default": "claude",
