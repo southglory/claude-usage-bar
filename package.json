@@ -1,7 +1,7 @@
 {
   "name": "claude-multi-usage",
   "displayName": "Claude Multi-Account Usage",
-  "description": "여러 Claude 계정(N개, 자동 탐지·자유 라벨)의 5h·7d 사용량을 상태바에 동시 표시 + 계정별 터미널 실행",
+  "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
   "version": "0.2.0",
   "icon": "icon.png",
   "publisher": "southglory",
@@ -17,79 +17,79 @@
   "main": "./extension.js",
   "contributes": {
     "commands": [
-      { "command": "claudeMultiUsage.openDashboard", "title": "Claude Multi Usage: 사용량 대시보드 열기" },
-      { "command": "claudeMultiUsage.refresh", "title": "Claude Multi Usage: 새로고침" },
-      { "command": "claudeMultiUsage.openSettings", "title": "Claude Multi Usage: 설정 열기" },
-      { "command": "claudeMultiUsage.openCache", "title": "Claude Multi Usage: 캐시 파일 열기" },
-      { "command": "claudeMultiUsage.launch", "title": "Claude: 계정 선택해 터미널 열기" },
-      { "command": "claudeMultiUsage.addAccount", "title": "Claude: 계정 추가" },
-      { "command": "claudeMultiUsage.removeAccount", "title": "Claude: 계정 제거" }
+      { "command": "claudeMultiUsage.openDashboard", "title": "Claude Multi Usage: Open Usage Dashboard" },
+      { "command": "claudeMultiUsage.refresh", "title": "Claude Multi Usage: Refresh" },
+      { "command": "claudeMultiUsage.openSettings", "title": "Claude Multi Usage: Open Settings" },
+      { "command": "claudeMultiUsage.openCache", "title": "Claude Multi Usage: Open Cache File" },
+      { "command": "claudeMultiUsage.launch", "title": "Claude: Open Terminal for Account" },
+      { "command": "claudeMultiUsage.addAccount", "title": "Claude: Add Account" },
+      { "command": "claudeMultiUsage.removeAccount", "title": "Claude: Remove Account" }
     ],
     "icons": {
-      "quokka-0": { "description": "Quokka mascot — legs short", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E001" } },
-      "quokka-1": { "description": "Quokka mascot — legs long", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E002" } }
+      "quokka-0": { "description": "Quokka mascot — breathing frame 1 (rest)", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E001" } },
+      "quokka-1": { "description": "Quokka mascot — breathing frame 2 (bob up)", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E002" } }
     },
     "configuration": {
       "title": "Claude Multi-Account Usage",
       "properties": {
         "claudeMultiUsage.accounts": {
           "type": "array",
-          "markdownDescription": "표시할 계정 목록(개수 제한 없음). `dir` 은 각 계정의 CLAUDE_CONFIG_DIR (`~`/`%VAR%`/`${env}` 확장). **비워두면** 홈에서 `.claude*` 디렉터리를 자동 탐지한다. `Claude: 계정 추가` 명령으로 UI 추가 가능.",
+          "markdownDescription": "Accounts to display (no count limit). `dir` is each account's CLAUDE_CONFIG_DIR (`~`/`%VAR%`/`${env}` expanded). **Leave empty** to auto-detect `.claude*` directories in your home folder. You can also add accounts via the `Claude: Add Account` command.",
           "items": {
             "type": "object",
             "required": ["label", "dir"],
             "properties": {
-              "label": { "type": "string", "description": "상태바 라벨(자유 지정)" },
-              "dir": { "type": "string", "description": "config 디렉터리 (예: ~/.claude, ~/.claude-work)" },
-              "command": { "type": "string", "description": "이 계정을 열 때 실행할 명령. 비우면 CLAUDE_CONFIG_DIR 주입 후 launchCommand 실행. `ccw`/`ccp` 같은 cc-switch 래퍼를 넣으면 그 래퍼가 그대로 실행됨(env 주입 생략 — 일반 터미널 ccw 경험과 동일)." }
+              "label": { "type": "string", "description": "Status bar label (free text)" },
+              "dir": { "type": "string", "description": "Config directory (e.g. ~/.claude, ~/.claude-work)" },
+              "command": { "type": "string", "description": "Command to run when opening this account. If empty, CLAUDE_CONFIG_DIR is injected and launchCommand is run. If you set a cc-switch wrapper like `ccw`/`ccp`, that wrapper runs as-is (env injection is skipped — same as running ccw in a normal terminal)." }
             }
           },
           "default": []
         },
         "claudeMultiUsage.refreshIntervalSeconds": {
           "type": "number", "default": 30, "minimum": 5,
-          "description": "캐시 폴링 주기(초)"
+          "description": "Cache polling interval (seconds)"
         },
         "claudeMultiUsage.progressBarLength": {
           "type": "number", "default": 8, "minimum": 4, "maximum": 20,
-          "description": "진행 바 길이(문자 수)"
+          "description": "Progress bar length (number of characters)"
         },
         "claudeMultiUsage.warnAt": {
           "type": "number", "default": 0.5, "minimum": 0, "maximum": 1,
-          "description": "이 사용률 이상이면 노란색(기본 50%)"
+          "description": "Turn yellow at or above this utilization (default 50%)"
         },
         "claudeMultiUsage.critAt": {
           "type": "number", "default": 0.9, "minimum": 0, "maximum": 1,
-          "description": "이 사용률 이상이면 빨간색"
+          "description": "Turn red at or above this utilization"
         },
         "claudeMultiUsage.show7d": {
           "type": "boolean", "default": true,
-          "description": "상태바 라벨에 7일(weekly) % 도 함께 표시"
+          "description": "Also show the 7-day (weekly) % in the status bar label"
         },
         "claudeMultiUsage.showCharacter": {
           "type": "boolean", "default": true,
-          "description": "각 계정 앞에 숨쉬는 쿼카 마스코트 표시"
+          "description": "Show the breathing quokka mascot before each account"
         },
         "claudeMultiUsage.enableAnimation": {
           "type": "boolean", "default": true,
-          "description": "마스코트 위아래 숨쉬기 애니메이션(showCharacter 필요)"
+          "description": "Animate the mascot's up/down breathing (requires showCharacter)"
         },
         "claudeMultiUsage.animationPeriodMs": {
           "type": "number", "default": 2000, "minimum": 400,
-          "description": "숨쉬기 한 주기(ms). 프레임 수로 나눠 전환"
+          "description": "One full breathing cycle (ms), divided by the number of frames"
         },
         "claudeMultiUsage.characterFrames": {
           "type": "array", "items": { "type": "string" }, "default": ["$(quokka-0)", "$(quokka-1)"],
-          "description": "마스코트 애니메이션 프레임(픽셀 쿼카 위아래 2프레임 기본). 원하는 글자/codicon/이모지로 교체 가능 (예: [\"▃\",\"▆\"])"
+          "description": "Mascot animation frames (defaults to the 2-frame pixel quokka up/down breathing). Replace with any text/codicon/emoji you like (e.g. [\"▃\",\"▆\"])."
         },
         "claudeMultiUsage.launchCommand": {
           "type": "string", "default": "claude",
-          "description": "계정 터미널을 열 때 실행할 명령. 비우면 환경변수만 설정하고 실행은 하지 않음."
+          "description": "Command to run when opening an account terminal. If empty, only the environment variable is set and nothing is run."
         },
         "claudeMultiUsage.clickAction": {
           "type": "string", "enum": ["refresh", "dashboard", "launch", "openCache"], "default": "refresh",
-          "enumDescriptions": ["즉시 새로고침(기본)", "사용량 대시보드 창 열기", "그 계정의 Claude 터미널 열기", "사용량 캐시 파일 열기"],
-          "description": "상태바 항목 좌클릭 시 동작. 대시보드·터미널·캐시·설정은 호버 툴팁 링크로도 열 수 있습니다(우클릭 커스텀 메뉴는 VS Code가 지원하지 않음)."
+          "enumDescriptions": ["Refresh immediately (default)", "Open the usage dashboard panel", "Open that account's Claude terminal", "Open the usage cache file"],
+          "description": "Action when an item is left-clicked. Dashboard / Terminal / Cache / Settings are also reachable via the hover tooltip links (VS Code does not support a custom right-click menu on status bar items)."
         }
       }
     }

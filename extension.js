@@ -1,6 +1,6 @@
-// Claude Multi-Account Usage — VSCode 상태바 extension
-// 여러 Claude config 디렉터리의 vscode-claude-status-cache.json 을 읽어
-// 계정별 5h / 7d 사용률을 동시에 표시한다. (cc-switch ccp/ccw 멀티계정용)
+// Claude Multi-Account Usage — VS Code status bar extension.
+// Reads each Claude config dir's vscode-claude-status-cache.json and shows
+// per-account 5h / 7d usage side by side. (For cc-switch ccp/ccw multi-account.)
 'use strict';
 
 const vscode = require('vscode');
@@ -10,8 +10,9 @@ const path = require('path');
 
 const CACHE_FILE = 'vscode-claude-status-cache.json';
 const CFG = 'claudeMultiUsage';
+const FALLBACK_FRAMES = ['$(quokka-0)', '$(quokka-1)'];
 
-/** ~ 와 환경변수(%VAR% / ${VAR})를 실제 경로로 확장 */
+/** Expand ~ and environment variables (%VAR% / ${env:VAR}) to a real path. */
 function expandDir(dir) {
   let d = String(dir || '').trim();
   if (d === '~' || d.startsWith('~/') || d.startsWith('~\\')) {
@@ -22,14 +23,14 @@ function expandDir(dir) {
   return path.normalize(d);
 }
 
-/** 폴더명에서 라벨 유도: ".claude"→"claude", ".claude-work"→"work" */
+/** Derive a label from the folder name: ".claude"->"claude", ".claude-work"->"work". */
 function labelFromDir(name) {
   const base = path.basename(name);
   const s = base.replace(/^\.claude/, '').replace(/^[-_]/, '');
   return s || 'claude';
 }
 
-/** 홈에서 .claude* 디렉터리를 자동 탐지 (projects/ 또는 캐시 파일 보유 시) */
+/** Auto-detect .claude* dirs in the home folder (those with projects/ or a cache file). */
 function discoverAccounts() {
   const home = os.homedir();
   let entries;
@@ -49,11 +50,11 @@ function discoverAccounts() {
     if (!hasData) continue;
     out.push({ label: labelFromDir(e.name), dir: '~/' + e.name });
   }
-  out.sort((a, b) => a.dir.localeCompare(b.dir)); // index 안정화
+  out.sort((a, b) => a.dir.localeCompare(b.dir)); // stable index order
   return out;
 }
 
-/** <dir>/vscode-claude-status-cache.json 을 읽어 usageData 반환 (없으면 null) */
+/** Read <dir>/vscode-claude-status-cache.json and return its usageData (null if missing). */
 function readUsage(dir) {
   const file = path.join(dir, CACHE_FILE);
   try {
@@ -70,7 +71,7 @@ function pct(x) {
   return Math.round(x * 100);
 }
 
-/** 사용률 → charts 색(텍스트 색, 배경 스왑 없음): 초록<warn / 노랑<crit / 빨강 */
+/** Usage -> chart color (text color, no background swap): green < warn, yellow < crit, red. */
 function colorFor(util, warnAt, critAt) {
   if (typeof util !== 'number') return undefined;
   if (util >= critAt) return new vscode.ThemeColor('charts.red');
@@ -78,7 +79,7 @@ function colorFor(util, warnAt, critAt) {
   return new vscode.ThemeColor('charts.green');
 }
 
-/** 0~1 비율 → 1/8 정밀 진행 바 ("██████▌░░"). 52%와 50%가 시각적으로 다르게 보인다. */
+/** 0..1 ratio -> 1/8-precision progress bar ("██████▌░░"); 52% looks distinct from 50%. */
 const BLK = ['░', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
 function bar(p, len) {
   const v = Math.max(0, Math.min(1, typeof p === 'number' ? p : 0));
@@ -90,7 +91,7 @@ function bar(p, len) {
   return s;
 }
 
-/** epoch(초) → 남은 시간 짧게 "1h 23m" / "12m" */
+/** epoch (seconds) -> short remaining time "1h 23m" / "12m". */
 function remain(epochSec) {
   const diff = (epochSec || 0) * 1000 - Date.now();
   if (diff <= 0) return 'now';
@@ -105,16 +106,16 @@ class Bar {
     this.timer = null;
     this.animTimer = null;
     this.animFrame = 0;
-    this.panel = null;   // 대시보드 웹뷰(싱글턴)
-    this._snap = [];     // 대시보드용 최신 스냅샷
+    this.panel = null;   // dashboard webview (singleton)
+    this._snap = [];     // latest snapshot for the dashboard
     this.showChar = true;
-    this.frames = ['$(quokka-0)', '$(quokka-1)'];
+    this.frames = FALLBACK_FRAMES.slice();
   }
 
   config() {
     const c = vscode.workspace.getConfiguration(CFG);
     let accounts = c.get('accounts') || [];
-    if (!accounts.length) accounts = discoverAccounts(); // 비었으면 자동 탐지
+    if (!accounts.length) accounts = discoverAccounts(); // auto-detect when empty
     return {
       accounts,
       interval: (c.get('refreshIntervalSeconds') || 30) * 1000,
@@ -125,13 +126,13 @@ class Bar {
       showChar: c.get('showCharacter', true),
       anim: c.get('enableAnimation', true),
       animMs: c.get('animationPeriodMs', 2000),
-      frames: c.get('characterFrames', ['$(quokka-0)', '$(quokka-1)']),
+      frames: c.get('characterFrames', FALLBACK_FRAMES.slice()),
       launchCommand: c.get('launchCommand', 'claude'),
       clickAction: c.get('clickAction', 'refresh'),
     };
   }
 
-  /** 계정 수만큼 StatusBarItem 재생성 */
+  /** Recreate one StatusBarItem per account. */
   rebuild() {
     this.items.forEach((i) => i.dispose());
     this.items = [];
@@ -140,28 +141,28 @@ class Bar {
       : clickAction === 'openCache' ? 'claudeMultiUsage.openCache'
       : clickAction === 'refresh' ? 'claudeMultiUsage.refresh'
       : 'claudeMultiUsage.openDashboard';
-    // priority 를 내림차순으로 줘서 입력 순서대로 왼→오 정렬
+    // Descending priority so items keep the configured left-to-right order.
     accounts.forEach((_, idx) => {
       const item = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
         100 - idx
       );
-      // 클릭 시 해당 계정 index 를 인자로 넘김
+      // Pass the account index as the click argument.
       item.command = { command: cmd, title: 'Claude', arguments: [idx] };
       this.items.push(item);
     });
   }
 
-  /** 계정 index 로 터미널을 연다.
-   *  - command 지정(예: ccw/ccp): env 주입 없이 그 래퍼를 그대로 실행 = 일반 터미널 ccw 경험
-   *  - 미지정: CLAUDE_CONFIG_DIR 주입 후 launchCommand(기본 claude) 실행 */
+  /** Open a terminal for the given account index.
+   *  - command set (e.g. ccw/ccp): run that wrapper as-is, no env injection (same as a normal terminal).
+   *  - not set: inject CLAUDE_CONFIG_DIR, then run launchCommand (default "claude"). */
   launch(idx) {
     const { accounts, launchCommand } = this.config();
     const acc = accounts[idx];
     if (!acc) return;
     const wrapper = (acc.command || '').trim();
     const name = `Claude · ${acc.label || acc.dir}`;
-    // 같은 이름 터미널이 있으면 재사용
+    // Reuse an existing terminal with the same name.
     const existing = vscode.window.terminals.find((t) => t.name === name);
     const opts = { name };
     if (!wrapper) opts.env = { CLAUDE_CONFIG_DIR: expandDir(acc.dir) };
@@ -173,7 +174,7 @@ class Bar {
     }
   }
 
-  /** QuickPick 으로 계정 선택 후 launch */
+  /** Pick an account via QuickPick, then launch it. */
   async pickAndLaunch() {
     const { accounts } = this.config();
     if (!accounts.length) return;
@@ -183,12 +184,12 @@ class Bar {
         description: expandDir(a.dir),
         idx: i,
       })),
-      { placeHolder: '터미널을 열 Claude 계정 선택' }
+      { placeHolder: 'Select a Claude account to open a terminal for' }
     );
     if (picked) this.launch(picked.idx);
   }
 
-  /** 설정에 저장된 계정 배열(없으면 탐지 결과를 명시적으로 구체화) */
+  /** Accounts stored in settings (fall back to the detected list, made explicit). */
   storedAccounts() {
     const cur = vscode.workspace.getConfiguration(CFG).get('accounts') || [];
     return cur.length ? cur.slice() : discoverAccounts();
@@ -200,17 +201,17 @@ class Bar {
       .update('accounts', next, vscode.ConfigurationTarget.Global);
   }
 
-  /** 계정 추가: 자동탐지 목록 또는 직접 입력, 라벨 자유 지정 */
+  /** Add an account: pick from auto-detected list or enter manually, with a free label. */
   async addAccount() {
     const cur = this.storedAccounts();
     const seen = new Set(cur.map((a) => expandDir(a.dir)));
     const items = discoverAccounts()
       .filter((d) => !seen.has(expandDir(d.dir)))
       .map((d) => ({ label: `$(folder) ${d.label}`, description: d.dir, acc: d }));
-    items.push({ label: '$(edit) 직접 입력…', description: '', acc: null });
+    items.push({ label: '$(edit) Enter manually…', description: '', acc: null });
 
     const pick = await vscode.window.showQuickPick(items, {
-      placeHolder: '추가할 계정 (자동 탐지됨)',
+      placeHolder: 'Account to add (auto-detected)',
     });
     if (!pick) return;
 
@@ -220,46 +221,46 @@ class Bar {
       label = pick.acc.label;
     } else {
       dir = await vscode.window.showInputBox({
-        prompt: 'CLAUDE_CONFIG_DIR 경로',
-        placeHolder: '~/.claude-<이름>',
+        prompt: 'CLAUDE_CONFIG_DIR path',
+        placeHolder: '~/.claude-<name>',
       });
       if (!dir) return;
       label = labelFromDir(dir);
     }
-    label = await vscode.window.showInputBox({ prompt: '표시 이름(라벨)', value: label });
+    label = await vscode.window.showInputBox({ prompt: 'Display label', value: label });
     if (label == null) return;
 
     const command = await vscode.window.showInputBox({
-      prompt: '열기 명령 (비우면 CLAUDE_CONFIG_DIR 주입+claude). cc-switch 래퍼를 그대로 쓰려면 ccw/ccp 입력',
-      placeHolder: '예: ccw / ccp / 비움',
+      prompt: 'Launch command (empty = inject CLAUDE_CONFIG_DIR + claude). To use a cc-switch wrapper as-is, enter ccw/ccp.',
+      placeHolder: 'e.g. ccw / ccp / empty',
     });
-    if (command == null) return; // ESC = 취소
+    if (command == null) return; // ESC = cancel
 
     const acc = { label: label.trim() || label, dir: dir.trim() };
     if (command.trim()) acc.command = command.trim();
     await this.saveAccounts([...cur, acc]);
     vscode.window.showInformationMessage(
-      `Claude 계정 추가: ${acc.label} (${acc.dir}${acc.command ? ', ' + acc.command : ''})`
+      `Added Claude account: ${acc.label} (${acc.dir}${acc.command ? ', ' + acc.command : ''})`
     );
   }
 
-  /** 계정 제거 */
+  /** Remove an account. */
   async removeAccount() {
     const cur = this.storedAccounts();
     if (!cur.length) return;
     const pick = await vscode.window.showQuickPick(
       cur.map((a, i) => ({ label: a.label, description: expandDir(a.dir), idx: i })),
-      { placeHolder: '제거할 계정' }
+      { placeHolder: 'Account to remove' }
     );
     if (!pick) return;
     await this.saveAccounts(cur.filter((_, i) => i !== pick.idx));
-    vscode.window.showInformationMessage(`Claude 계정 제거: ${pick.label}`);
+    vscode.window.showInformationMessage(`Removed Claude account: ${pick.label}`);
   }
 
   refresh() {
     const { accounts, warnAt, critAt, show7d, barLen, showChar, frames } = this.config();
     this.showChar = showChar;
-    this.frames = frames && frames.length ? frames : ['ᵔ', 'ᵕ'];
+    this.frames = frames && frames.length ? frames : FALLBACK_FRAMES.slice();
     if (accounts.length !== this.items.length) this.rebuild();
     const deco = (b) =>
       (showChar && this.frames.length ? this.frames[this.animFrame % this.frames.length] + ' ' : '') + b;
@@ -281,10 +282,10 @@ class Bar {
         item.backgroundColor = undefined;
         const md = new vscode.MarkdownString();
         md.isTrusted = true;
-        md.appendMarkdown(`**${label}** · 사용량 캐시 없음\n\n`);
+        md.appendMarkdown(`**${label}** · no usage cache yet\n\n`);
         md.appendMarkdown(error === 'ENOENT'
-          ? `이 계정으로 Claude 세션을 한 번 실행하면 생성됩니다.\n\n`
-          : `읽기 오류: \`${error}\`\n\n`);
+          ? `Run one Claude session with this account to create it.\n\n`
+          : `Read error: \`${error}\`\n\n`);
         md.appendMarkdown(`\`${path.join(dir, CACHE_FILE)}\`\n\n`);
         md.appendMarkdown(this.menuLinks(idx));
         item.tooltip = md;
@@ -300,7 +301,7 @@ class Bar {
       const blocked = data.limitStatus && data.limitStatus !== 'allowed';
       const lvl = Math.max(typeof u5 === 'number' ? u5 : 0, typeof u7 === 'number' ? u7 : 0);
 
-      // 진행 바 형식: "개인 ██████▌░ 52% · 36%"  (한도/소진 시 카운트다운)
+      // Progress-bar form: "personal ██████▌░ 52% · 36%" (countdown when exhausted/blocked).
       let body;
       if (blocked || (typeof u5 === 'number' && u5 >= 1)) {
         body = `${label} ${bar(1, barLen)} reset ${remain(data.reset5hAt)}`;
@@ -315,14 +316,14 @@ class Bar {
 
       const md = new vscode.MarkdownString();
       md.isTrusted = true;
-      md.appendMarkdown(`**${label}** — Claude 사용량\n\n`);
+      md.appendMarkdown(`**${label}** — Claude usage\n\n`);
       md.appendMarkdown('```\n');
       md.appendMarkdown(`5h  ${bar(u5, barLen)} ${(p5 ?? '?')}%   reset ${remain(data.reset5hAt)}\n`);
       md.appendMarkdown(`7d  ${bar(u7, barLen)} ${(p7 ?? '?')}%   reset ${remain(data.reset7dAt)}\n`);
       md.appendMarkdown('```\n\n');
-      md.appendMarkdown(`상태: \`${data.limitStatus || '?'}\``);
-      if (updatedAt) md.appendMarkdown(` · 갱신 ${new Date(updatedAt).toLocaleTimeString()}`);
-      md.appendMarkdown(`\n\n_좌클릭 → 새로고침_\n\n${this.menuLinks(idx)}`);
+      md.appendMarkdown(`Status: \`${data.limitStatus || '?'}\``);
+      if (updatedAt) md.appendMarkdown(` · updated ${new Date(updatedAt).toLocaleTimeString()}`);
+      md.appendMarkdown(`\n\n_Left-click → refresh_\n\n${this.menuLinks(idx)}`);
       item.tooltip = md;
       item.show();
       snap.push({
@@ -335,16 +336,16 @@ class Bar {
     this.updateDashboard();
   }
 
-  /** 호버 툴팁용 클릭 가능한 명령 링크(우클릭 메뉴 대용) */
+  /** Clickable command links for the hover tooltip (a stand-in for a right-click menu). */
   menuLinks(idx) {
     const a = encodeURIComponent(JSON.stringify([idx]));
-    return `[대시보드](command:claudeMultiUsage.openDashboard) · `
-      + `[터미널](command:claudeMultiUsage.launch?${a}) · `
-      + `[캐시](command:claudeMultiUsage.openCache?${a}) · `
-      + `[설정](command:claudeMultiUsage.openSettings)`;
+    return `[Dashboard](command:claudeMultiUsage.openDashboard) · `
+      + `[Terminal](command:claudeMultiUsage.launch?${a}) · `
+      + `[Cache](command:claudeMultiUsage.openCache?${a}) · `
+      + `[Settings](command:claudeMultiUsage.openSettings)`;
   }
 
-  /** 숨쉬기 애니메이션: 본문은 그대로 두고 마스코트 프레임만 교체(가벼움) */
+  /** Breathing animation: keep the body text, only swap the mascot frame (cheap). */
   tick() {
     if (!this.showChar || !this.frames || this.frames.length < 2) return;
     this.animFrame = (this.animFrame + 1) % this.frames.length;
@@ -354,7 +355,7 @@ class Bar {
     }
   }
 
-  /** 클릭 → 사용량 대시보드 웹뷰 (모든 계정 바·리셋 + 새로고침·터미널·캐시 버튼) */
+  /** Open the usage dashboard webview (all accounts, bars/resets + refresh/terminal/cache buttons). */
   openDashboard() {
     if (this.panel) {
       this.panel.reveal();
@@ -362,7 +363,7 @@ class Bar {
       return;
     }
     this.panel = vscode.window.createWebviewPanel(
-      'claudeMultiUsage', 'Claude 사용량', vscode.ViewColumn.Active,
+      'claudeMultiUsage', 'Claude Usage', vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
     this.panel.onDidDispose(() => { this.panel = null; });
@@ -375,7 +376,7 @@ class Bar {
         if (f) vscode.window.showTextDocument(vscode.Uri.file(f));
       }
     });
-    this.refresh(); // 스냅샷 + updateDashboard 로 html 채움
+    this.refresh(); // builds snapshot + fills html via updateDashboard
   }
 
   updateDashboard() {
@@ -393,12 +394,12 @@ class Bar {
         + `<span class="pct" style="color:${col(p)}">${p == null ? '?' : p + '%'}</span><span class="rst">reset ${esc(reset)}</span></div>`;
     };
     const card = (s) => s.none
-      ? `<div class="card"><div class="hd">${esc(s.label)}</div><div class="meta">사용량 캐시 없음 — 이 계정으로 Claude 세션을 한 번 실행하세요.</div>`
-        + `<div class="btns"><button onclick="post('launch',${s.idx})">터미널 열기</button></div></div>`
-      : `<div class="card"><div class="hd">${esc(s.label)}${s.blocked ? ' <span class="blocked">한도초과</span>' : ''}</div>`
+      ? `<div class="card"><div class="hd">${esc(s.label)}</div><div class="meta">No usage cache yet — run one Claude session with this account.</div>`
+        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button></div></div>`
+      : `<div class="card"><div class="hd">${esc(s.label)}${s.blocked ? ' <span class="blocked">limit reached</span>' : ''}</div>`
         + barRow(s.p5, '5h', remain(s.reset5hAt)) + barRow(s.p7, '7d', remain(s.reset7dAt))
-        + `<div class="meta">상태 ${esc(s.status || '?')}${s.updatedAt ? ' · 갱신 ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>`
-        + `<div class="btns"><button onclick="post('launch',${s.idx})">터미널 열기</button><button class="sec" onclick="post('openCache',${s.idx})">캐시 파일</button></div></div>`;
+        + `<div class="meta">Status ${esc(s.status || '?')}${s.updatedAt ? ' · updated ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>`
+        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button><button class="sec" onclick="post('openCache',${s.idx})">Cache file</button></div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:14px 18px;}
       .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
@@ -418,8 +419,8 @@ class Bar {
       button.sec{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);}
       button:hover{opacity:.88;} .empty{color:var(--vscode-descriptionForeground);}
     </style></head><body>
-      <div class="top"><h2>🦘 Claude 사용량 (멀티계정)</h2><button onclick="post('refresh')">새로고침</button></div>
-      ${snap.length ? snap.map(card).join('') : '<div class="empty">표시할 계정이 없습니다. 설정에서 계정을 추가하세요.</div>'}
+      <div class="top"><h2>Claude Usage (multi-account)</h2><button onclick="post('refresh')">Refresh</button></div>
+      ${snap.length ? snap.map(card).join('') : '<div class="empty">No accounts to show. Add one in settings.</div>'}
       <script>const v=acquireVsCodeApi();function post(type,idx){v.postMessage({type,idx});}</script>
     </body></html>`;
   }
