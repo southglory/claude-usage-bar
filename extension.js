@@ -88,6 +88,22 @@ function bar(p, len) {
   return FILL.repeat(n) + EMPTY.repeat(len - n);
 }
 
+/** Colored bar for the HTML tooltip. Every cell is the SAME █ glyph (so all cells
+ *  are exactly the same height — a clean rectangle), distinguished only by color:
+ *  filled cells take the usage color, empty cells a dim gray. This avoids the
+ *  height mismatch you get from mixing █ with the shorter ░/▒ shade glyphs. */
+function barHtml(p, len, warnAt, critAt) {
+  const v = Math.max(0, Math.min(1, typeof p === 'number' ? p : 0));
+  const n = Math.max(0, Math.min(len, Math.round(v * len)));
+  const fill = typeof p !== 'number' ? '#888'
+    : v >= critAt ? '#f14c4c' : v >= warnAt ? '#cca700' : '#3fb950';
+  let s = '';
+  for (let i = 0; i < len; i++) {
+    s += `<span style="color:${i < n ? fill : '#5a5a5a'};">█</span>`;
+  }
+  return s;
+}
+
 /** epoch (seconds) -> short remaining time "1h 23m" / "12m". */
 function remain(epochSec) {
   const diff = (epochSec || 0) * 1000 - Date.now();
@@ -367,12 +383,13 @@ class Bar {
 
       const md = new vscode.MarkdownString();
       md.isTrusted = true;
+      md.supportHtml = true; // colored █ bars render at a uniform height
       md.appendMarkdown(`**${label}** — Claude usage\n\n`);
-      md.appendMarkdown('```\n');
-      md.appendMarkdown(`5h  ${bar(u5, barLen)} ${(p5 ?? '?')}%   reset ${remain(data.reset5hAt)}\n`);
-      md.appendMarkdown(`7d  ${bar(u7, barLen)} ${(p7 ?? '?')}%   reset ${remain(data.reset7dAt)}\n`);
-      md.appendMarkdown('```\n\n');
-      md.appendMarkdown(`Status: \`${data.limitStatus || '?'}\``);
+      const row = (lab, p, b, reset) =>
+        `${lab} ${barHtml(b, barLen, warnAt, critAt)} ${(p ?? '?')}% &nbsp;reset ${remain(reset)}<br>`;
+      md.appendMarkdown(row('5h', p5, u5, data.reset5hAt));
+      md.appendMarkdown(row('7d', p7, u7, data.reset7dAt));
+      md.appendMarkdown(`\n\nStatus: \`${data.limitStatus || '?'}\``);
       if (updatedAt) md.appendMarkdown(` · updated ${new Date(updatedAt).toLocaleTimeString()}`);
       md.appendMarkdown(`\n\n_Left-click → refresh_\n\n${this.menuLinks(idx)}`);
       item.tooltip = md;
