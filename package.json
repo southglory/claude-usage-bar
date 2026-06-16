@@ -2,7 +2,7 @@
   "name": "claude-multi-usage",
   "displayName": "Claude Multi-Account Usage",
   "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "icon": "icon.png",
   "publisher": "southglory",
   "author": "southglory",
@@ -65,6 +65,10 @@
         "claudeMultiUsage.show7d": {
           "type": "boolean", "default": true,
           "description": "Also show the 7-day (weekly) % in the status bar label"
+        },
+        "claudeMultiUsage.fetchUsageViaApi": {
+          "type": "boolean", "default": true,
+          "markdownDescription": "When an account has no `vscode-claude-status-cache.json` (the Claude Code VS Code integration only writes it for the one account it polls), fetch that account's usage directly from the Anthropic API using its `.credentials.json` OAuth token and the rate-limit response headers — the same method `long-kudo.vscode-claude-status` uses. This is the only way to show usage for a second account used only in a terminal. Sends a tiny 1-token request per refresh; disable to use cache files only."
         },
         "claudeMultiUsage.showCharacter": {
           "type": "boolean", "default": true,

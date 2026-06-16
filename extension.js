@@ -1,14 +1,20 @@
 // Claude Multi-Account Usage — VS Code status bar extension.
-// Reads each Claude config dir's vscode-claude-status-cache.json and shows
-// per-account 5h / 7d usage side by side. (For cc-switch ccp/ccw multi-account.)
+// Per account, usage comes from one of two sources, in order:
+//   1) <config dir>/vscode-claude-status-cache.json — the cache the Claude Code
+//      VS Code integration writes, but ONLY for the one account it polls.
+//   2) the Anthropic API — read <config dir>/.credentials.json's OAuth token and
+//      GET the rate-limit response headers (the method long-kudo.vscode-claude-status
+//      uses). This works for ANY account, including ones used only in a terminal.
 'use strict';
 
 const vscode = require('vscode');
+const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const CACHE_FILE = 'vscode-claude-status-cache.json';
+const CREDS_FILE = '.credentials.json';
 const CFG = 'claudeMultiUsage';
 const FALLBACK_FRAMES = ['$(quokka-0)', '$(quokka-1)'];
 
@@ -63,6 +69,81 @@ function readUsage(dir) {
   } catch (e) {
     return { file, data: null, updatedAt: null, error: e.code || String(e.message || e) };
   }
+}
+
+/** Read <dir>/.credentials.json -> { token, expiresAt } (claudeAiOauth.accessToken). */
+function readToken(dir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, CREDS_FILE), 'utf8'));
+    const o = j.claudeAiOauth || j;
+    return { token: o.accessToken || o.access_token || null, expiresAt: o.expiresAt || null };
+  } catch (e) {
+    return { token: null, expiresAt: null };
+  }
+}
+
+const norm01 = (x) => {
+  const n = parseFloat(x);
+  return isNaN(n) ? null : n > 1 ? n / 100 : n;   // header may be percent (0..100) or fraction
+};
+const toEpochSec = (x) => {
+  if (x == null) return null;
+  const n = Number(x);
+  if (!isNaN(n) && x !== '') return n > 1e12 ? Math.round(n / 1000) : Math.round(n); // ms vs s
+  const t = Date.parse(x);
+  return isNaN(t) ? null : Math.round(t / 1000);
+};
+
+/** Fetch usage for a config dir straight from the Anthropic API using the account's
+ *  OAuth token, reading the rate-limit response headers. Promise<usageData>. This is
+ *  how long-kudo.vscode-claude-status does it — no cache file needed, works for any
+ *  account. Sends a 1-token message request (minimal) just to read the headers. */
+function fetchUsageViaApi(dir) {
+  return new Promise((resolve, reject) => {
+    const { token } = readToken(dir);
+    if (!token) return reject(new Error('no-credentials'));
+    // OAuth (claude.ai subscription) tokens only accept current models; an unknown
+    // model 404s. Use the small current Haiku, like long-kudo does.
+    const body = JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: '.' }],
+    });
+    const req = https.request(
+      {
+        hostname: 'api.anthropic.com',
+        path: '/v1/messages',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+          authorization: `Bearer ${token}`,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'oauth-2025-04-20',
+        },
+      },
+      (res) => {
+        const h = res.headers;
+        res.on('data', () => {}); // drain
+        res.on('end', () => {
+          const u5 = h['anthropic-ratelimit-unified-5h-utilization'];
+          const u7 = h['anthropic-ratelimit-unified-7d-utilization'];
+          if (u5 == null && u7 == null) return reject(new Error('http-' + res.statusCode));
+          resolve({
+            utilization5h: norm01(u5),
+            utilization7d: norm01(u7),
+            reset5hAt: toEpochSec(h['anthropic-ratelimit-unified-5h-reset']),
+            reset7dAt: toEpochSec(h['anthropic-ratelimit-unified-7d-reset']),
+            limitStatus: h['anthropic-ratelimit-unified-5h-status'] || 'allowed',
+          });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('timeout')));
+    req.write(body);
+    req.end();
+  });
 }
 
 function pct(x) {
@@ -123,6 +204,7 @@ class Bar {
     this._snap = [];     // latest snapshot for the dashboard
     this.showChar = true;
     this.frames = FALLBACK_FRAMES.slice();
+    this._api = {};      // dir -> { data, updatedAt, ts, pending, error } (API-fetched usage)
   }
 
   config() {
@@ -142,7 +224,21 @@ class Bar {
       frames: c.get('characterFrames', FALLBACK_FRAMES.slice()),
       launchCommand: c.get('launchCommand', 'claude'),
       clickAction: c.get('clickAction', 'refresh'),
+      apiFallback: c.get('fetchUsageViaApi', true),
     };
+  }
+
+  /** Throttled background API fetch for an account with no cache file. Stores the
+   *  result in this._api[dir] and re-renders when it resolves. */
+  ensureApiUsage(dir, interval) {
+    const slot = this._api[dir] || (this._api[dir] = {});
+    if (slot.pending) return;
+    if (slot.ts && Date.now() - slot.ts < Math.max(15000, interval)) return; // throttle
+    slot.pending = true;
+    fetchUsageViaApi(dir)
+      .then((data) => { slot.data = data; slot.updatedAt = new Date().toISOString(); slot.error = null; })
+      .catch((e) => { slot.error = (e && e.message) || String(e); })
+      .finally(() => { slot.pending = false; slot.ts = Date.now(); this.refresh(); });
   }
 
   /** Recreate one StatusBarItem per account. */
@@ -325,7 +421,7 @@ class Bar {
   }
 
   refresh() {
-    const { accounts, warnAt, critAt, show7d, barLen, showChar, frames } = this.config();
+    const { accounts, warnAt, critAt, show7d, barLen, showChar, frames, apiFallback, interval } = this.config();
     this.showChar = showChar;
     this.frames = frames && frames.length ? frames : FALLBACK_FRAMES.slice();
     if (accounts.length !== this.items.length) this.rebuild();
@@ -337,27 +433,46 @@ class Bar {
       const item = this.items[idx];
       if (!item) return;
       const dir = expandDir(acc.dir);
-      const { data, updatedAt, file, error } = readUsage(dir);
+      let { data, updatedAt, file, error } = readUsage(dir);
       const label = acc.label || acc.dir;
       item.__file = file;
+      let source = data ? 'cache' : null;
+
+      // No cache file (e.g. a second account used only in a terminal): fall back to
+      // fetching usage straight from the API, the way long-kudo does.
+      const slot = this._api[dir];
+      if (!data && apiFallback) {
+        if (slot && slot.data) { data = slot.data; updatedAt = slot.updatedAt; source = 'api'; }
+        if (readToken(dir).token) this.ensureApiUsage(dir, interval); // refresh in background
+      }
 
       if (!data) {
-        const body = `${label} —`;
+        const hasCreds = !!readToken(dir).token;
+        const fetching = apiFallback && hasCreds && slot && slot.pending;
+        const body = `${label} ${fetching ? '…' : '—'}`;
         item.__body = body;
         item.text = deco(body);
         item.color = undefined;
         item.backgroundColor = undefined;
         const md = new vscode.MarkdownString();
         md.isTrusted = true;
-        md.appendMarkdown(`**${label}** · no usage cache yet\n\n`);
-        md.appendMarkdown(error === 'ENOENT'
-          ? `Run one Claude session with this account to create it.\n\n`
-          : `Read error: \`${error}\`\n\n`);
-        md.appendMarkdown(`\`${path.join(dir, CACHE_FILE)}\`\n\n`);
+        md.appendMarkdown(`**${label}** · no usage yet\n\n`);
+        if (apiFallback && hasCreds) {
+          md.appendMarkdown(slot && slot.error
+            ? `API fetch failed: \`${slot.error}\` (token may be expired — log in again).\n\n`
+            : `Fetching usage from the API…\n\n`);
+        } else if (apiFallback && !hasCreds) {
+          md.appendMarkdown(`No \`${CREDS_FILE}\` in this dir — **Log in** to create it.\n\n`);
+        } else {
+          md.appendMarkdown(error === 'ENOENT'
+            ? `No cache file; enable \`fetchUsageViaApi\` or run a session.\n\n`
+            : `Read error: \`${error}\`\n\n`);
+        }
+        md.appendMarkdown(`\`${dir}\`\n\n`);
         md.appendMarkdown(this.menuLinks(idx));
         item.tooltip = md;
         item.show();
-        snap.push({ idx, label, none: true, error });
+        snap.push({ idx, label, none: true, error: slot && slot.error });
         return;
       }
 
@@ -389,13 +504,13 @@ class Bar {
         `${lab} ${barHtml(b, barLen, warnAt, critAt)} ${(p ?? '?')}% &nbsp;reset ${remain(reset)}<br>`;
       md.appendMarkdown(row('5h', p5, u5, data.reset5hAt));
       md.appendMarkdown(row('7d', p7, u7, data.reset7dAt));
-      md.appendMarkdown(`\n\nStatus: \`${data.limitStatus || '?'}\``);
+      md.appendMarkdown(`\n\nStatus: \`${data.limitStatus || '?'}\` · via ${source === 'api' ? 'API' : 'cache'}`);
       if (updatedAt) md.appendMarkdown(` · updated ${new Date(updatedAt).toLocaleTimeString()}`);
       md.appendMarkdown(`\n\n_Left-click → refresh_\n\n${this.menuLinks(idx)}`);
       item.tooltip = md;
       item.show();
       snap.push({
-        idx, label, p5, p7, blocked,
+        idx, label, p5, p7, blocked, source,
         status: data.limitStatus, reset5hAt: data.reset5hAt, reset7dAt: data.reset7dAt, updatedAt,
       });
     });

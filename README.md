@@ -29,22 +29,24 @@ takes a list of accounts and reads each directory, so **N accounts** show on one
 
 ## Data source
 
-Reads the cache Claude Code writes per config dir (no parsing / estimation):
+Per account, usage comes from one of two sources (in order):
 
-```jsonc
-<CLAUDE_CONFIG_DIR>/vscode-claude-status-cache.json
-{ "usageData": { "utilization5h": 0.29, "utilization7d": 0.04,
-                 "reset5hAt": 1781493600, "reset7dAt": 1782054000,
-                 "limitStatus": "allowed" } }
-```
+1. **Cache file** — `<CLAUDE_CONFIG_DIR>/vscode-claude-status-cache.json`, written by Claude Code's VS Code integration. Free to read, but Claude Code only writes it for the **one** account VS Code polls — a second account used only in a terminal never gets one.
 
-If an account has no cache yet (shown as `—`), run one Claude session with that
-account to create it.
+   ```jsonc
+   { "usageData": { "utilization5h": 0.29, "utilization7d": 0.04,
+                    "reset5hAt": 1781493600, "reset7dAt": 1782054000,
+                    "limitStatus": "allowed" } }
+   ```
+
+2. **API fallback** (`fetchUsageViaApi`, on by default) — if there's no cache file, read the account's `.credentials.json` OAuth token and fetch its usage straight from `api.anthropic.com` via the rate-limit response headers (the method `long-kudo.vscode-claude-status` uses). This is the only way to show a second account's usage. It sends a tiny 1-token request per refresh; the tooltip shows `via API` vs `via cache`. Turn it off to use cache files only.
+
+If an account has neither a cache nor credentials yet, use **Log in** (dashboard or tooltip) to sign in and create `.credentials.json`.
 
 ## Install
 
 - **Dev run**: open this folder in VS Code and press `F5` (Extension Development Host).
-- **From VSIX**: `code --install-extension southglory.claude-multi-usage-0.2.0.vsix` (or Extensions panel → ⋯ → *Install from VSIX…*).
+- **From VSIX**: `code --install-extension southglory.claude-multi-usage-0.3.0.vsix` (or Extensions panel → ⋯ → *Install from VSIX…*).
 - **Marketplace**: search "Claude Multi-Account Usage" (once published).
 
 ## Configure (`settings.json`)
