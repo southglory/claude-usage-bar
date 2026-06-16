@@ -70,25 +70,32 @@ function pct(x) {
   return Math.round(x * 100);
 }
 
-/** 사용률 → 상태바 배경/전경 색 ThemeColor */
+/** 사용률 → charts 색(텍스트 색, 배경 스왑 없음): 초록<warn / 노랑<crit / 빨강 */
 function colorFor(util, warnAt, critAt) {
   if (typeof util !== 'number') return undefined;
-  if (util >= critAt) return new vscode.ThemeColor('statusBarItem.errorBackground');
-  if (util >= warnAt) return new vscode.ThemeColor('statusBarItem.warningBackground');
-  return undefined;
+  if (util >= critAt) return new vscode.ThemeColor('charts.red');
+  if (util >= warnAt) return new vscode.ThemeColor('charts.yellow');
+  return new vscode.ThemeColor('charts.green');
 }
 
-/** epoch(초) → "2시간 13분 후 (14:30)" 형태 */
-function resetText(epochSec) {
-  if (!epochSec) return '?';
-  const ms = epochSec * 1000;
-  const diff = ms - Date.now();
-  const at = new Date(ms).toLocaleString();
-  if (diff <= 0) return `리셋됨 (${at})`;
-  const m = Math.floor(diff / 60000);
-  const h = Math.floor(m / 60);
-  const rel = h > 0 ? `${h}시간 ${m % 60}분 후` : `${m}분 후`;
-  return `${rel} (${at})`;
+/** 0~1 비율 → 1/8 정밀 진행 바 ("██████▌░░"). 52%와 50%가 시각적으로 다르게 보인다. */
+const BLK = ['░', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+function bar(p, len) {
+  const v = Math.max(0, Math.min(1, typeof p === 'number' ? p : 0));
+  let s = '';
+  for (let i = 0; i < len; i++) {
+    const cell = Math.max(0, Math.min(1, v * len - i));
+    s += BLK[Math.round(cell * 8)];
+  }
+  return s;
+}
+
+/** epoch(초) → 남은 시간 짧게 "1h 23m" / "12m" */
+function remain(epochSec) {
+  const diff = (epochSec || 0) * 1000 - Date.now();
+  if (diff <= 0) return 'now';
+  const m = Math.floor(diff / 60000), h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
 }
 
 class Bar {
@@ -96,6 +103,12 @@ class Bar {
     /** @type {vscode.StatusBarItem[]} */
     this.items = [];
     this.timer = null;
+    this.animTimer = null;
+    this.animFrame = 0;
+    this.panel = null;   // 대시보드 웹뷰(싱글턴)
+    this._snap = [];     // 대시보드용 최신 스냅샷
+    this.showChar = true;
+    this.frames = ['ᵔ', 'ᵕ'];
   }
 
   config() {
@@ -105,11 +118,16 @@ class Bar {
     return {
       accounts,
       interval: (c.get('refreshIntervalSeconds') || 30) * 1000,
-      warnAt: c.get('warnAt', 0.7),
+      warnAt: c.get('warnAt', 0.5),
       critAt: c.get('critAt', 0.9),
+      barLen: c.get('progressBarLength', 8),
       show7d: c.get('show7d', true),
+      showChar: c.get('showCharacter', true),
+      anim: c.get('enableAnimation', true),
+      animMs: c.get('animationPeriodMs', 2000),
+      frames: c.get('characterFrames', ['ᵔ', 'ᵕ']),
       launchCommand: c.get('launchCommand', 'claude'),
-      clickAction: c.get('clickAction', 'launch'),
+      clickAction: c.get('clickAction', 'refresh'),
     };
   }
 
@@ -118,9 +136,10 @@ class Bar {
     this.items.forEach((i) => i.dispose());
     this.items = [];
     const { accounts, clickAction } = this.config();
-    const cmd = clickAction === 'openCache'
-      ? 'claudeMultiUsage.openCache'
-      : 'claudeMultiUsage.launch';
+    const cmd = clickAction === 'launch' ? 'claudeMultiUsage.launch'
+      : clickAction === 'openCache' ? 'claudeMultiUsage.openCache'
+      : clickAction === 'refresh' ? 'claudeMultiUsage.refresh'
+      : 'claudeMultiUsage.openDashboard';
     // priority 를 내림차순으로 줘서 입력 순서대로 왼→오 정렬
     accounts.forEach((_, idx) => {
       const item = vscode.window.createStatusBarItem(
@@ -238,8 +257,13 @@ class Bar {
   }
 
   refresh() {
-    const { accounts, warnAt, critAt, show7d } = this.config();
+    const { accounts, warnAt, critAt, show7d, barLen, showChar, frames } = this.config();
+    this.showChar = showChar;
+    this.frames = frames && frames.length ? frames : ['ᵔ', 'ᵕ'];
     if (accounts.length !== this.items.length) this.rebuild();
+    const deco = (b) =>
+      (showChar && this.frames.length ? this.frames[this.animFrame % this.frames.length] + ' ' : '') + b;
+    const snap = [];
 
     accounts.forEach((acc, idx) => {
       const item = this.items[idx];
@@ -247,19 +271,25 @@ class Bar {
       const dir = expandDir(acc.dir);
       const { data, updatedAt, file, error } = readUsage(dir);
       const label = acc.label || acc.dir;
+      item.__file = file;
 
       if (!data) {
-        item.text = `$(pulse) ${label} —`;
+        const body = `${label} —`;
+        item.__body = body;
+        item.text = deco(body);
+        item.color = undefined;
+        item.backgroundColor = undefined;
         const md = new vscode.MarkdownString();
+        md.isTrusted = true;
         md.appendMarkdown(`**${label}** · 사용량 캐시 없음\n\n`);
         md.appendMarkdown(error === 'ENOENT'
           ? `이 계정으로 Claude 세션을 한 번 실행하면 생성됩니다.\n\n`
           : `읽기 오류: \`${error}\`\n\n`);
-        md.appendMarkdown(`\`${path.join(dir, CACHE_FILE)}\``);
+        md.appendMarkdown(`\`${path.join(dir, CACHE_FILE)}\`\n\n`);
+        md.appendMarkdown(this.menuLinks(idx));
         item.tooltip = md;
-        item.backgroundColor = undefined;
         item.show();
-        item.__file = file;
+        snap.push({ idx, label, none: true, error });
         return;
       }
 
@@ -268,43 +298,153 @@ class Bar {
       const p5 = pct(u5);
       const p7 = pct(u7);
       const blocked = data.limitStatus && data.limitStatus !== 'allowed';
+      const lvl = Math.max(typeof u5 === 'number' ? u5 : 0, typeof u7 === 'number' ? u7 : 0);
 
-      let text = `$(pulse) ${label} ${p5 == null ? '?' : p5 + '%'}`;
-      if (show7d && p7 != null) text += `·${p7}%`;
-      if (blocked) text = `$(warning) ${label} 한도초과`;
-      item.text = text;
-      item.backgroundColor = blocked
-        ? new vscode.ThemeColor('statusBarItem.errorBackground')
-        : colorFor(Math.max(u5 || 0, u7 || 0), warnAt, critAt);
+      // 진행 바 형식: "개인 ██████▌░ 52% · 36%"  (한도/소진 시 카운트다운)
+      let body;
+      if (blocked || (typeof u5 === 'number' && u5 >= 1)) {
+        body = `${label} ${bar(1, barLen)} reset ${remain(data.reset5hAt)}`;
+      } else {
+        body = `${label} ${bar(u5, barLen)} ${p5 == null ? '?' : p5 + '%'}`;
+        if (show7d && p7 != null) body += ` · ${p7}%`;
+      }
+      item.__body = body;
+      item.text = deco(body);
+      item.color = blocked ? new vscode.ThemeColor('charts.red') : colorFor(lvl, warnAt, critAt);
+      item.backgroundColor = undefined;
 
       const md = new vscode.MarkdownString();
+      md.isTrusted = true;
       md.appendMarkdown(`**${label}** — Claude 사용량\n\n`);
-      md.appendMarkdown(`| 창 | 사용률 | 리셋 |\n|---|---|---|\n`);
-      md.appendMarkdown(`| 5시간 | **${p5 ?? '?'}%** | ${resetText(data.reset5hAt)} |\n`);
-      md.appendMarkdown(`| 7일 | **${p7 ?? '?'}%** | ${resetText(data.reset7dAt)} |\n\n`);
-      md.appendMarkdown(`상태: \`${data.limitStatus || '?'}\`\n\n`);
-      if (updatedAt) md.appendMarkdown(`갱신: ${new Date(updatedAt).toLocaleString()}\n\n`);
-      md.appendMarkdown(`_클릭 → 캐시 파일 열기_`);
+      md.appendMarkdown('```\n');
+      md.appendMarkdown(`5h  ${bar(u5, barLen)} ${(p5 ?? '?')}%   reset ${remain(data.reset5hAt)}\n`);
+      md.appendMarkdown(`7d  ${bar(u7, barLen)} ${(p7 ?? '?')}%   reset ${remain(data.reset7dAt)}\n`);
+      md.appendMarkdown('```\n\n');
+      md.appendMarkdown(`상태: \`${data.limitStatus || '?'}\``);
+      if (updatedAt) md.appendMarkdown(` · 갱신 ${new Date(updatedAt).toLocaleTimeString()}`);
+      md.appendMarkdown(`\n\n_좌클릭 → 새로고침_\n\n${this.menuLinks(idx)}`);
       item.tooltip = md;
-      item.__file = file;
       item.show();
+      snap.push({
+        idx, label, p5, p7, blocked,
+        status: data.limitStatus, reset5hAt: data.reset5hAt, reset7dAt: data.reset7dAt, updatedAt,
+      });
     });
+
+    this._snap = snap;
+    this.updateDashboard();
+  }
+
+  /** 호버 툴팁용 클릭 가능한 명령 링크(우클릭 메뉴 대용) */
+  menuLinks(idx) {
+    const a = encodeURIComponent(JSON.stringify([idx]));
+    return `[대시보드](command:claudeMultiUsage.openDashboard) · `
+      + `[터미널](command:claudeMultiUsage.launch?${a}) · `
+      + `[캐시](command:claudeMultiUsage.openCache?${a}) · `
+      + `[설정](command:claudeMultiUsage.openSettings)`;
+  }
+
+  /** 숨쉬기 애니메이션: 본문은 그대로 두고 마스코트 프레임만 교체(가벼움) */
+  tick() {
+    if (!this.showChar || !this.frames || this.frames.length < 2) return;
+    this.animFrame = (this.animFrame + 1) % this.frames.length;
+    const f = this.frames[this.animFrame];
+    for (const item of this.items) {
+      if (item.__body != null) item.text = f + ' ' + item.__body;
+    }
+  }
+
+  /** 클릭 → 사용량 대시보드 웹뷰 (모든 계정 바·리셋 + 새로고침·터미널·캐시 버튼) */
+  openDashboard() {
+    if (this.panel) {
+      this.panel.reveal();
+      this.updateDashboard();
+      return;
+    }
+    this.panel = vscode.window.createWebviewPanel(
+      'claudeMultiUsage', 'Claude 사용량', vscode.ViewColumn.Active,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    this.panel.onDidDispose(() => { this.panel = null; });
+    this.panel.webview.onDidReceiveMessage((m) => {
+      if (!m) return;
+      if (m.type === 'refresh') this.refresh();
+      else if (m.type === 'launch') this.launch(m.idx);
+      else if (m.type === 'openCache') {
+        const f = this.items[m.idx] && this.items[m.idx].__file;
+        if (f) vscode.window.showTextDocument(vscode.Uri.file(f));
+      }
+    });
+    this.refresh(); // 스냅샷 + updateDashboard 로 html 채움
+  }
+
+  updateDashboard() {
+    if (this.panel) this.panel.webview.html = this.dashHtml(this._snap || []);
+  }
+
+  dashHtml(snap) {
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const col = (p) => p == null ? 'var(--vscode-descriptionForeground)'
+      : p >= 90 ? 'var(--vscode-charts-red)' : p >= 50 ? 'var(--vscode-charts-yellow)' : 'var(--vscode-charts-green)';
+    const barRow = (p, lab, reset) => {
+      const w = Math.max(0, Math.min(100, p || 0));
+      return `<div class="barrow"><span class="lab">${lab}</span><div class="track"><div class="fill" style="width:${w}%;background:${col(p)}"></div></div>`
+        + `<span class="pct" style="color:${col(p)}">${p == null ? '?' : p + '%'}</span><span class="rst">reset ${esc(reset)}</span></div>`;
+    };
+    const card = (s) => s.none
+      ? `<div class="card"><div class="hd">${esc(s.label)}</div><div class="meta">사용량 캐시 없음 — 이 계정으로 Claude 세션을 한 번 실행하세요.</div>`
+        + `<div class="btns"><button onclick="post('launch',${s.idx})">터미널 열기</button></div></div>`
+      : `<div class="card"><div class="hd">${esc(s.label)}${s.blocked ? ' <span class="blocked">한도초과</span>' : ''}</div>`
+        + barRow(s.p5, '5h', remain(s.reset5hAt)) + barRow(s.p7, '7d', remain(s.reset7dAt))
+        + `<div class="meta">상태 ${esc(s.status || '?')}${s.updatedAt ? ' · 갱신 ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>`
+        + `<div class="btns"><button onclick="post('launch',${s.idx})">터미널 열기</button><button class="sec" onclick="post('openCache',${s.idx})">캐시 파일</button></div></div>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:14px 18px;}
+      .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+      h2{margin:0;font-size:16px;}
+      .card{border:1px solid var(--vscode-panel-border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--vscode-editorWidget-background);}
+      .hd{font-weight:700;font-size:14px;margin-bottom:8px;}
+      .blocked{color:var(--vscode-charts-red);font-size:11px;border:1px solid var(--vscode-charts-red);border-radius:6px;padding:1px 6px;}
+      .barrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px;}
+      .lab{width:22px;color:var(--vscode-descriptionForeground);}
+      .track{flex:1;height:10px;border-radius:6px;background:var(--vscode-input-background);overflow:hidden;}
+      .fill{height:100%;border-radius:6px;transition:width .3s;}
+      .pct{width:40px;text-align:right;font-variant-numeric:tabular-nums;}
+      .rst{width:104px;color:var(--vscode-descriptionForeground);font-size:11px;}
+      .meta{color:var(--vscode-descriptionForeground);font-size:11px;margin:6px 0 8px;}
+      .btns{display:flex;gap:6px;}
+      button{font-family:inherit;font-size:12px;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground);}
+      button.sec{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);}
+      button:hover{opacity:.88;} .empty{color:var(--vscode-descriptionForeground);}
+    </style></head><body>
+      <div class="top"><h2>🦘 Claude 사용량 (멀티계정)</h2><button onclick="post('refresh')">새로고침</button></div>
+      ${snap.length ? snap.map(card).join('') : '<div class="empty">표시할 계정이 없습니다. 설정에서 계정을 추가하세요.</div>'}
+      <script>const v=acquireVsCodeApi();function post(type,idx){v.postMessage({type,idx});}</script>
+    </body></html>`;
   }
 
   start() {
     this.rebuild();
     this.refresh();
-    const { interval } = this.config();
+    const { interval, anim, animMs, frames, showChar } = this.config();
     this.timer = setInterval(() => this.refresh(), interval);
+    if (this.animTimer) clearInterval(this.animTimer);
+    if (anim && showChar && frames && frames.length >= 2) {
+      this.animTimer = setInterval(() => this.tick(), Math.max(200, Math.floor(animMs / frames.length)));
+    }
   }
 
   restart() {
     if (this.timer) clearInterval(this.timer);
+    if (this.animTimer) clearInterval(this.animTimer);
     this.start();
   }
 
   dispose() {
     if (this.timer) clearInterval(this.timer);
+    if (this.animTimer) clearInterval(this.animTimer);
+    if (this.panel) this.panel.dispose();
     this.items.forEach((i) => i.dispose());
   }
 }
@@ -316,6 +456,10 @@ function activate(context) {
   context.subscriptions.push(
     bar,
     vscode.commands.registerCommand('claudeMultiUsage.refresh', () => bar.refresh()),
+    vscode.commands.registerCommand('claudeMultiUsage.openDashboard', () => bar.openDashboard()),
+    vscode.commands.registerCommand('claudeMultiUsage.openSettings', () =>
+      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:southglory.claude-multi-usage')
+    ),
     vscode.commands.registerCommand('claudeMultiUsage.launch', (idx) =>
       typeof idx === 'number' ? bar.launch(idx) : bar.pickAndLaunch()
     ),
