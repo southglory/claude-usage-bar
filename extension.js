@@ -185,6 +185,15 @@ function barHtml(p, len, warnAt, critAt) {
   return s;
 }
 
+/** epoch (seconds) -> absolute reset time: time-of-day if within a day, else date+time. */
+function resetAt(epochSec) {
+  if (!epochSec) return '?';
+  const d = new Date(epochSec * 1000);
+  return epochSec * 1000 - Date.now() < 24 * 3600 * 1000
+    ? d.toLocaleTimeString()
+    : d.toLocaleString();
+}
+
 /** epoch (seconds) -> short remaining time "1h 23m" / "12m". */
 function remain(epochSec) {
   const diff = (epochSec || 0) * 1000 - Date.now();
@@ -501,11 +510,13 @@ class Bar {
       md.supportHtml = true; // colored █ bars render at a uniform height
       md.appendMarkdown(`**${label}** — Claude usage\n\n`);
       const row = (lab, p, b, reset) =>
-        `${lab} ${barHtml(b, barLen, warnAt, critAt)} ${(p ?? '?')}% &nbsp;reset ${remain(reset)}<br>`;
+        `${lab} ${barHtml(b, barLen, warnAt, critAt)} ${(p ?? '?')}%<br>`
+        + `&nbsp;&nbsp;&nbsp;resets at ${resetAt(reset)} · time until reset ${remain(reset)}<br>`;
       md.appendMarkdown(row('5h', p5, u5, data.reset5hAt));
       md.appendMarkdown(row('7d', p7, u7, data.reset7dAt));
-      md.appendMarkdown(`\n\nStatus: \`${data.limitStatus || '?'}\` · via ${source === 'api' ? 'API' : 'cache'}`);
-      if (updatedAt) md.appendMarkdown(` · updated ${new Date(updatedAt).toLocaleTimeString()}`);
+      if (blocked) md.appendMarkdown(`\n\n⚠ limit status: \`${data.limitStatus}\``);
+      const src = source === 'api' ? 'via API' : 'via cache';
+      md.appendMarkdown(`\n\n_${src}${updatedAt ? ' · updated ' + new Date(updatedAt).toLocaleTimeString() : ''}_`);
       md.appendMarkdown(`\n\n_Left-click → refresh_\n\n${this.menuLinks(idx)}`);
       item.tooltip = md;
       item.show();
