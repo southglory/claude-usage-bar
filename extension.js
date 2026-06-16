@@ -23,11 +23,10 @@ function expandDir(dir) {
   return path.normalize(d);
 }
 
-/** Derive a label from the folder name: ".claude"->"claude", ".claude-work"->"work". */
+/** Default label = the folder name as-is (".claude", ".claude-work"). No parsing /
+ *  stripping — the user names accounts freely and we never impose a convention. */
 function labelFromDir(name) {
-  const base = path.basename(name);
-  const s = base.replace(/^\.claude/, '').replace(/^[-_]/, '');
-  return s || 'claude';
+  return path.basename(name) || 'claude';
 }
 
 /** Auto-detect .claude* dirs in the home folder (those with projects/ or a cache file). */
@@ -79,10 +78,10 @@ function colorFor(util, warnAt, critAt) {
   return new vscode.ThemeColor('charts.green');
 }
 
-/** 0..1 ratio -> whole-cell progress bar ("██████░░"). Filled and empty cells are
- *  both full-height block glyphs, so the whole bar is a clean rectangle (no ragged
- *  half-width edge). */
-const FILL = '█', EMPTY = '░';
+/** 0..1 ratio -> whole-cell progress bar ("██████▒▒"). Filled (█) and empty (▒) are
+ *  both full-cell block glyphs of the same height, so the whole bar is a clean
+ *  rectangle (no ragged half-width edge, no short dotted ░ tail). */
+const FILL = '█', EMPTY = '▒';
 function bar(p, len) {
   const v = Math.max(0, Math.min(1, typeof p === 'number' ? p : 0));
   const n = Math.max(0, Math.min(len, Math.round(v * len)));
@@ -242,6 +241,60 @@ class Bar {
     );
   }
 
+  /** Add an account straight from the dashboard form: free label + dir, optionally
+   *  open a terminal for the first login. No name parsing — the label is whatever
+   *  the user typed (defaults to the folder name as-is). */
+  async addFromDashboard(label, dir, login) {
+    dir = (dir || '').trim();
+    if (!dir) {
+      vscode.window.showWarningMessage('Enter a config directory (e.g. ~/.claude-work).');
+      return;
+    }
+    label = (label || '').trim() || labelFromDir(dir);
+    const cur = this.storedAccounts();
+    const exists = cur.some((a) => expandDir(a.dir) === expandDir(dir));
+    if (!exists) {
+      await this.saveAccounts([...cur, { label, dir }]);
+      this.rebuild();
+      this.refresh();
+    }
+    const idx = this.storedAccounts().findIndex((a) => expandDir(a.dir) === expandDir(dir));
+    vscode.window.showInformationMessage(
+      `${exists ? 'Account exists' : 'Added account'}: ${label} (${dir})`
+    );
+    if (login && idx >= 0) this.loginAccount(idx);
+  }
+
+  /** First-login helper: open a terminal with this account's CLAUDE_CONFIG_DIR set
+   *  and run the launch command, so a brand-new directory prompts for login. Always
+   *  injects env + runs launchCommand (ignores any cc-switch wrapper) for a clean
+   *  first auth. */
+  loginAccount(idx) {
+    const { accounts, launchCommand } = this.config();
+    const acc = accounts[idx];
+    if (!acc) return;
+    const name = `Claude login · ${acc.label || acc.dir}`;
+    const term = vscode.window.terminals.find((t) => t.name === name)
+      || vscode.window.createTerminal({ name, env: { CLAUDE_CONFIG_DIR: expandDir(acc.dir) } });
+    term.show();
+    const cmd = (launchCommand || 'claude').trim();
+    if (cmd) term.sendText(cmd);
+    vscode.window.showInformationMessage(
+      `Logging in "${acc.label || acc.dir}" — complete the login in the opened terminal.`
+    );
+  }
+
+  /** Remove the account at idx (used by the dashboard trash button). */
+  async removeByIndex(idx) {
+    const cur = this.storedAccounts();
+    if (idx < 0 || idx >= cur.length) return;
+    const removed = cur[idx];
+    await this.saveAccounts(cur.filter((_, i) => i !== idx));
+    this.rebuild();
+    this.refresh();
+    vscode.window.showInformationMessage(`Removed account: ${removed.label || removed.dir}`);
+  }
+
   /** Remove an account. */
   async removeAccount() {
     const cur = this.storedAccounts();
@@ -369,6 +422,9 @@ class Bar {
       if (!m) return;
       if (m.type === 'refresh') this.refresh();
       else if (m.type === 'launch') this.launch(m.idx);
+      else if (m.type === 'login') this.loginAccount(m.idx);
+      else if (m.type === 'add') this.addFromDashboard(m.label, m.dir, m.login);
+      else if (m.type === 'remove') this.removeByIndex(m.idx);
       else if (m.type === 'openCache') {
         const f = this.items[m.idx] && this.items[m.idx].__file;
         if (f) vscode.window.showTextDocument(vscode.Uri.file(f));
@@ -392,12 +448,18 @@ class Bar {
         + `<span class="pct" style="color:${col(p)}">${p == null ? '?' : p + '%'}</span><span class="rst">reset ${esc(reset)}</span></div>`;
     };
     const card = (s) => s.none
-      ? `<div class="card"><div class="hd">${esc(s.label)}</div><div class="meta">No usage cache yet — run one Claude session with this account.</div>`
-        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button></div></div>`
+      ? `<div class="card"><div class="hd">${esc(s.label)}</div>`
+        + `<div class="meta">No usage cache yet — log in once with this account to create it.</div>`
+        + `<div class="btns"><button onclick="post('login',${s.idx})">Log in</button>`
+        + `<button class="sec" onclick="post('launch',${s.idx})">Open terminal</button>`
+        + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></div>`
       : `<div class="card"><div class="hd">${esc(s.label)}${s.blocked ? ' <span class="blocked">limit reached</span>' : ''}</div>`
         + barRow(s.p5, '5h', remain(s.reset5hAt)) + barRow(s.p7, '7d', remain(s.reset7dAt))
         + `<div class="meta">Status ${esc(s.status || '?')}${s.updatedAt ? ' · updated ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>`
-        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button><button class="sec" onclick="post('openCache',${s.idx})">Cache file</button></div></div>`;
+        + `<div class="btns"><button onclick="post('launch',${s.idx})">Open terminal</button>`
+        + `<button class="sec" onclick="post('login',${s.idx})">Log in</button>`
+        + `<button class="sec" onclick="post('openCache',${s.idx})">Cache file</button>`
+        + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:14px 18px;}
       .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
@@ -412,14 +474,41 @@ class Bar {
       .pct{width:40px;text-align:right;font-variant-numeric:tabular-nums;}
       .rst{width:104px;color:var(--vscode-descriptionForeground);font-size:11px;}
       .meta{color:var(--vscode-descriptionForeground);font-size:11px;margin:6px 0 8px;}
-      .btns{display:flex;gap:6px;}
+      .btns{display:flex;gap:6px;flex-wrap:wrap;}
       button{font-family:inherit;font-size:12px;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground);}
       button.sec{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);}
-      button:hover{opacity:.88;} .empty{color:var(--vscode-descriptionForeground);}
+      button:hover{opacity:.88;} .empty{color:var(--vscode-descriptionForeground);margin-bottom:10px;}
+      .add{border:1px dashed var(--vscode-panel-border);border-radius:10px;padding:12px 14px;margin-top:6px;}
+      .add .row{display:flex;gap:8px;margin:8px 0;}
+      .add input{flex:1;font-family:inherit;font-size:12px;padding:5px 8px;border-radius:6px;
+        border:1px solid var(--vscode-input-border,transparent);background:var(--vscode-input-background);color:var(--vscode-input-foreground);}
+      .hint{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:6px;}
     </style></head><body>
       <div class="top"><h2>Claude Usage (multi-account)</h2><button onclick="post('refresh')">Refresh</button></div>
-      ${snap.length ? snap.map(card).join('') : '<div class="empty">No accounts to show. Add one in settings.</div>'}
-      <script>const v=acquireVsCodeApi();function post(type,idx){v.postMessage({type,idx});}</script>
+      ${snap.length ? snap.map(card).join('') : '<div class="empty">No accounts yet — add one below.</div>'}
+      <div class="add">
+        <div class="hd">Add account</div>
+        <div class="row">
+          <input id="lab" placeholder="label — e.g. .claude-work" />
+          <input id="dir" placeholder="config dir — e.g. ~/.claude-work" />
+        </div>
+        <div class="btns">
+          <button onclick="add(true)">Add &amp; log in</button>
+          <button class="sec" onclick="add(false)">Add only</button>
+        </div>
+        <div class="hint">The label is shown as-is (no parsing). A new directory with no
+          login opens a terminal so you can sign in the first time.</div>
+      </div>
+      <script>
+        const v=acquireVsCodeApi();
+        function post(type,idx){v.postMessage({type,idx});}
+        function add(login){
+          const lab=document.getElementById('lab').value;
+          const dir=document.getElementById('dir').value;
+          v.postMessage({type:'add',label:lab,dir:dir,login:login});
+          document.getElementById('lab').value='';document.getElementById('dir').value='';
+        }
+      </script>
     </body></html>`;
   }
 

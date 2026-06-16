@@ -18,8 +18,9 @@ takes a list of accounts and reads each directory, so **N accounts** show on one
 ## Features
 
 - **N accounts, side by side** — no hard-coded names, no limit.
-- **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home and derives labels (`.claude-work` → `work`).
-- **Progress bars** — a clean whole-cell bar per account (`██████░░ 75% · 36%`); every cell is a full-height block, so the bar is a tidy rectangle.
+- **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home. Labels show the **folder name as-is** (`.claude`, `.claude-work`) — no parsing, no imposed convention. Rename them to anything you like.
+- **Add & log in from the dashboard** — add a second `.claude-…` account by name and open a terminal to sign in for the first time, all from the panel.
+- **Progress bars** — a clean whole-cell bar per account (`██████▒▒ 75% · 36%`); filled `█` and empty `▒` are the same full-cell height, so the bar is a tidy rectangle.
 - **Color thresholds** — green → yellow → red as usage rises; shows a reset countdown when the limit is reached.
 - **Breathing quokka mascot** — a tiny 2-frame pixel quokka that bobs up and down (toggle/replace via settings).
 - **Usage dashboard** — a webview panel with bars, reset timers, and refresh / terminal / cache buttons for every account.
@@ -50,8 +51,9 @@ account to create it.
 
 ```jsonc
 "claudeMultiUsage.accounts": [
-  { "label": "personal", "dir": "~/.claude",      "command": "ccp" },
-  { "label": "work",     "dir": "~/.claude-work", "command": "ccw" }
+  { "label": ".claude",      "dir": "~/.claude" },
+  { "label": ".claude-work", "dir": "~/.claude-work" }
+  // labels are free text — name them whatever you like
 ],
 "claudeMultiUsage.refreshIntervalSeconds": 30,
 "claudeMultiUsage.progressBarLength": 8,
@@ -65,12 +67,20 @@ account to create it.
 ```
 
 `dir` expands `~`, `%USERPROFILE%`, `${env:VAR}`. Auto-detect runs only when the list
-is empty. Status bar example: `🦘 personal ██░░░░░░ 29% · 4%   🦘 work █░░░░░░░ 12% · 3%`
+is empty. Status bar example: `🦘 .claude ██▒▒▒▒▒▒ 29% · 4%   🦘 .claude-work █▒▒▒▒▒▒▒ 12% · 3%`
 (first % = 5h, second = 7d).
 
 **Left-click** runs `clickAction` (refresh by default). The hover tooltip has
 clickable **Dashboard · Terminal · Cache · Settings** links — VS Code does not support
 a custom right-click menu on status bar items, so these live in the tooltip.
+
+## Add an account & first login
+
+Open the **dashboard** (tooltip → *Dashboard*, or the *Open Usage Dashboard* command):
+
+1. Under **Add account**, type a label (shown as-is, e.g. `.claude-work`) and a config dir (e.g. `~/.claude-work`).
+2. **Add & log in** saves it and opens a terminal with `CLAUDE_CONFIG_DIR` set to that dir, then runs `claude` — a brand-new directory will prompt you to sign in. (**Add only** skips the terminal.)
+3. Each account card also has **Log in** (re-auth), **Open terminal**, **Cache file**, and **Remove**.
 
 ## Account switching (cc-switch built in)
 
