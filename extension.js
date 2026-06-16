@@ -79,16 +79,14 @@ function colorFor(util, warnAt, critAt) {
   return new vscode.ThemeColor('charts.green');
 }
 
-/** 0..1 ratio -> 1/8-precision progress bar ("██████▌░░"); 52% looks distinct from 50%. */
-const BLK = ['░', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+/** 0..1 ratio -> whole-cell progress bar ("██████░░"). Filled and empty cells are
+ *  both full-height block glyphs, so the whole bar is a clean rectangle (no ragged
+ *  half-width edge). */
+const FILL = '█', EMPTY = '░';
 function bar(p, len) {
   const v = Math.max(0, Math.min(1, typeof p === 'number' ? p : 0));
-  let s = '';
-  for (let i = 0; i < len; i++) {
-    const cell = Math.max(0, Math.min(1, v * len - i));
-    s += BLK[Math.round(cell * 8)];
-  }
-  return s;
+  const n = Math.max(0, Math.min(len, Math.round(v * len)));
+  return FILL.repeat(n) + EMPTY.repeat(len - n);
 }
 
 /** epoch (seconds) -> short remaining time "1h 23m" / "12m". */

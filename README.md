@@ -19,7 +19,7 @@ takes a list of accounts and reads each directory, so **N accounts** show on one
 
 - **N accounts, side by side** — no hard-coded names, no limit.
 - **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home and derives labels (`.claude-work` → `work`).
-- **Progress bars** — a 1/8-precision bar per account (`██████▌░ 52% · 36%`), so 52% looks distinct from 50%.
+- **Progress bars** — a clean whole-cell bar per account (`██████░░ 75% · 36%`); every cell is a full-height block, so the bar is a tidy rectangle.
 - **Color thresholds** — green → yellow → red as usage rises; shows a reset countdown when the limit is reached.
 - **Breathing quokka mascot** — a tiny 2-frame pixel quokka that bobs up and down (toggle/replace via settings).
 - **Usage dashboard** — a webview panel with bars, reset timers, and refresh / terminal / cache buttons for every account.
@@ -65,7 +65,7 @@ account to create it.
 ```
 
 `dir` expands `~`, `%USERPROFILE%`, `${env:VAR}`. Auto-detect runs only when the list
-is empty. Status bar example: `🦘 personal ██████▌░ 29% · 4%   🦘 work ██▏░░░░░ 12% · 3%`
+is empty. Status bar example: `🦘 personal ██░░░░░░ 29% · 4%   🦘 work █░░░░░░░ 12% · 3%`
 (first % = 5h, second = 7d).
 
 **Left-click** runs `clickAction` (refresh by default). The hover tooltip has
