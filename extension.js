@@ -210,7 +210,7 @@ function decodeProject(name) {
   return parts.length ? parts.slice(-2).join('-') : String(name);
 }
 
-/** Scan <dir>/projects/**/*.jsonl and aggregate token cost by time window, project,
+/** Scan the JSONL session logs under <dir>/projects and aggregate token cost by window,
  *  day and hour. Cost = token counts × pricing — the same method ccusage / long-910
  *  use. It is the API-equivalent dollar value of the tokens (one price tier for all
  *  models), NOT your real subscription bill. Token counts are exact. Heavy: caller
