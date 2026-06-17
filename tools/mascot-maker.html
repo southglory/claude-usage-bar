@@ -37,6 +37,9 @@
   .frame .n { text-align:center; font-size:10px; color:var(--dim); }
   #preview { background:#111; border-radius:8px; padding:14px; display:flex; align-items:center; justify-content:center; }
   #preview canvas { image-rendering:pixelated; }
+  #sbar { display:flex; align-items:center; gap:8px; background:#2d2d2d; border-radius:6px; padding:5px 12px; margin-top:8px; }
+  #sbar canvas { image-rendering:pixelated; }
+  .sbtxt { font-size:12px; color:#d4d4d4; font-variant-numeric:tabular-nums; }
   pre { background:#111; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:11px; color:var(--dim); max-width:380px; }
   code { background:#111; padding:1px 5px; border-radius:4px; }
   .hint { color:var(--dim); font-size:12px; }
@@ -98,12 +101,17 @@
       </div>
     </div>
     <div class="panel">
-      <h2>Preview</h2>
+      <h2>Design preview (colors)</h2>
       <div id="preview"><canvas id="pcanvas" width="120" height="120"></canvas></div>
       <div class="row" style="margin-top:10px">
         <button id="play">▶ Play</button>
         <label>speed <input type="number" id="speed" min="100" max="3000" step="100" value="1000"> ms/frame</label>
       </div>
+
+      <h2 style="margin-top:16px">In the status bar (actual)</h2>
+      <div id="sbar"><canvas id="sbcanvas"></canvas><span class="sbtxt">.claude&nbsp;&nbsp;██▒▒▒▒&nbsp;42%</span></div>
+      <div class="hint">One themed color, looping live — this is the real status-bar look.
+        The colors above are only for designing; the glyph itself is single-color.</div>
     </div>
   </div>
 
@@ -284,6 +292,18 @@
     playing = setInterval(function () { pf = (pf + 1) % frames.length; renderPreview(pf); }, +document.getElementById("speed").value || 1000);
   };
 
+  // Status-bar preview: how it ACTUALLY renders — monochrome silhouette, looping.
+  var sbcv = document.getElementById("sbcanvas"), sbf = 0, sbTimer = null;
+  function renderSb(i) {
+    var scale = 3, g = frames[i] || frames[0];
+    sbcv.width = cols * scale; sbcv.height = rows * scale;
+    var x = sbcv.getContext("2d"); x.clearRect(0, 0, sbcv.width, sbcv.height);
+    x.fillStyle = "#d4d4d4"; // single themed color (every painted pixel = solid)
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) if (g[r][c]) x.fillRect(c * scale, r * scale, scale, scale);
+    var h = 18; sbcv.style.height = h + "px"; sbcv.style.width = Math.round(h * cols / rows) + "px";
+  }
+  function sbLoop() { sbf = (sbf + 1) % frames.length; renderSb(sbf); sbTimer = setTimeout(sbLoop, +document.getElementById("speed").value || 1000); }
+
   // ---- export / import (font = monochrome silhouette) ----
   function toSpec() {
     return {
@@ -314,6 +334,7 @@
   };
 
   syncColor(); buildGrid(); drawThumbs(); renderPreview(0);
+  renderSb(0); sbTimer = setTimeout(sbLoop, +document.getElementById("speed").value || 1000);
 })();
 </script>
 </body>
