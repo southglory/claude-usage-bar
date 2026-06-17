@@ -60,6 +60,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.6.2]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.2
 [0.6.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.0
 [0.5.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.5.0
 [0.4.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.4.0
