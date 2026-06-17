@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mascot Maker — Claude Multi-Account Usage</title>
 <style>
-  :root { --bg:#1e1e1e; --fg:#e6e6e6; --dim:#9aa0a6; --line:#3a3a3a; --accent:#4e94ce; --fill:#d99a5b; }
+  :root { --bg:#1e1e1e; --fg:#e6e6e6; --dim:#9aa0a6; --line:#3a3a3a; --accent:#4e94ce; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 system-ui,Segoe UI,sans-serif; background:var(--bg); color:var(--fg); }
   header { padding:14px 20px; border-bottom:1px solid var(--line); }
@@ -16,14 +16,20 @@
   .panel h2 { margin:0 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); }
   #grid { display:grid; gap:1px; background:var(--line); border:1px solid var(--line); width:max-content; touch-action:none; }
   #grid .cell { width:18px; height:18px; background:#262626; cursor:crosshair; }
-  #grid .cell.on { background:var(--fill); }
-  #grid.onion .cell.prev { box-shadow: inset 0 0 0 18px rgba(217,154,91,.18); }
+  #grid.onion .cell.prev { box-shadow: inset 0 0 0 18px rgba(255,255,255,.10); }
   .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   label { color:var(--dim); font-size:12px; }
   input[type=number] { width:56px; background:#262626; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:4px 6px; }
+  input[type=text] { background:#262626; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:4px 6px; }
   button { font:inherit; font-size:13px; border:1px solid var(--line); background:#2d2d2d; color:var(--fg); border-radius:7px; padding:6px 12px; cursor:pointer; }
   button:hover { border-color:var(--accent); }
   button.primary { background:var(--accent); border-color:var(--accent); color:#08233a; font-weight:600; }
+  .tool { padding:6px 10px; }
+  .tool.active { background:var(--accent); border-color:var(--accent); color:#08233a; font-weight:600; }
+  .swatches { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+  .sw { width:22px; height:22px; border-radius:5px; border:2px solid #00000000; cursor:pointer; }
+  .sw.active { border-color:#fff; }
+  #curcolor { width:26px; height:26px; border-radius:6px; border:1px solid var(--line); }
   .frames { display:flex; gap:8px; flex-wrap:wrap; }
   .frame { border:2px solid var(--line); border-radius:8px; padding:4px; cursor:pointer; background:#161616; }
   .frame.active { border-color:var(--accent); }
@@ -33,7 +39,6 @@
   #preview canvas { image-rendering:pixelated; }
   pre { background:#111; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:11px; color:var(--dim); max-width:380px; }
   code { background:#111; padding:1px 5px; border-radius:4px; }
-  a { color:var(--accent); }
   .hint { color:var(--dim); font-size:12px; }
 </style>
 </head>
@@ -47,10 +52,25 @@
   <!-- Drawing -->
   <div class="col">
     <div class="panel">
+      <h2>Tools</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="tool active" data-tool="pencil" title="Pencil (draw)">✏️ Pencil</button>
+        <button class="tool" data-tool="fill" title="Fill (bucket)">🪣 Fill</button>
+        <button class="tool" data-tool="eraser" title="Eraser">⌫ Eraser</button>
+        <button class="tool" data-tool="picker" title="Eyedropper">💧 Pick</button>
+      </div>
+      <div class="row">
+        <input type="color" id="picker" value="#d99a5b" title="Custom color">
+        <div id="curcolor"></div>
+        <div class="swatches" id="swatches"></div>
+      </div>
+    </div>
+
+    <div class="panel">
       <h2>Canvas</h2>
       <div class="row" style="margin-bottom:10px">
         <label>W <input type="number" id="cols" min="4" max="48" value="22"></label>
-        <label>H <input type="number" id="rows" min="4" max="48" value="22"></label>
+        <label>H <input type="number" id="rows" min="4" max="48" value="25"></label>
         <button id="resize">Resize</button>
         <button id="clear">Clear</button>
         <span style="flex:1"></span>
@@ -70,7 +90,7 @@
   <div class="col">
     <div class="panel">
       <h2>Frames (animation)</h2>
-      <div class="frames" id="frames"></div>
+      <div class="frames" id="framesEl"></div>
       <div class="row" style="margin-top:10px">
         <button id="addframe">+ Frame</button>
         <button id="dupframe">Duplicate</button>
@@ -92,7 +112,7 @@
     <div class="panel">
       <h2>Export</h2>
       <div class="row">
-        <label>name <input type="text" id="name" value="Quokka" style="width:120px;background:#262626;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px"></label>
+        <label>name <input type="text" id="name" value="Quokka" style="width:120px"></label>
         <label>px <input type="number" id="px" value="36" min="8" max="64"></label>
       </div>
       <div class="row" style="margin-top:10px">
@@ -105,13 +125,11 @@
   python tools/build_mascot_font.py \
   mascot.json mascot.ttf mascot</pre>
       <div class="hint">
-        That prints the <code>contributes.icons</code> block and the
-        <code>characterFrames</code> value to paste into the extension. Drop
-        <code>mascot.ttf</code> next to <code>package.json</code>, repackage, and your
-        mascot animates in the status bar.<br><br>
-        <b>No rebuild?</b> Pixel mascots need a bundled font (above). For a quick change
-        without rebuilding, set <code>claudeMultiUsage.characterFrames</code> to emojis
-        or codicons, e.g. <code>["▃","▆"]</code> or <code>["$(rocket)","$(flame)"]</code>.
+        Prints the <code>contributes.icons</code> block and the <code>characterFrames</code>
+        value to paste in. Drop <code>mascot.ttf</code> next to <code>package.json</code> and repackage.<br><br>
+        <b>Colors are for your design only.</b> The status-bar mascot is a single-color
+        font glyph, so every painted pixel becomes a solid silhouette (no holes) — colors
+        help you draw, but the glyph takes its color from the VS Code theme.
       </div>
     </div>
   </div>
@@ -119,36 +137,56 @@
 
 <script>
 (function () {
-  // ----- default mascot (the quokka), frame B = A bobbed up one row -----
-  var A = [
-    ".....####...####......",".....####...####......","....##############....",
-    "....##############....","....##############....","....##############....",
-    "....##############....","....##############....","....##############....",
-    "...################...","...################...","..##################..",
-    ".####################.",".####################.","..##################..",
-    "..##################..","...################...","...################...",
-    "...################...","....##############....","....##############....",
-    ".....##........##....."
+  // ---- palette + default colored quokka (letters -> colors) ----
+  var PAL = { K:"#5a3618", B:"#d99a5b", L:"#f5ddb3", P:"#e89690", e:"#2a211b", w:"#ffffff", n:"#6b3f22" };
+  var SWATCHES = ["#d99a5b","#5a3618","#f5ddb3","#e89690","#6b3f22","#2a211b","#ffffff","#4e94ce","#3fb950","#f14c4c","#cca700"];
+  var QUOKKA = [
+    ".....KKKK...KKKK......",".....KPPK...KPPK......","....KKKKKKKKKKKKKK....",
+    "....KBBBBBBBBBBBBK....","....KBBBBBBBBBBBBK....","....KBBBeeBBeeBBBK....",
+    "....KBBBewBBewBBBK....","....KBPBeeBBeeBPBK....","....KBBBBBnnBBBBBK....",
+    "....KBBBnBBBBnBBBK....","....KBBBBnnnnBBBBK....","....KBBBBBBBBBBBBK....",
+    "...KBBBBBBBBBBBBBBK...","...KBBBBLLLLLLBBBBK...","..KBBBBBLLLLLLBBBBBK..",
+    ".KBBBBBBLLLLLLBBBBBBK.",".KBBBBBBLLLLLLBBBBBBK.","..KBBBBBLLLLLLBBBBBK..",
+    "..KBBBBBLLLLLLBBBBBK..","...KBBBBLLLLLLBBBBK...","...KBBBBBBBBBBBBBBK...",
+    "...KBBBBBBBBBBBBBBK...","....KBBBBBBBBBBBBK....","....KBBKKKKKKKKBBK....",
+    ".....KK........KK....."
   ];
-  function strToGrid(rows) { return rows.map(function (r) { return r.split("").map(function (c) { return c !== "." && c !== " " ? 1 : 0; }); }); }
-  function blankRow(c) { return Array(c).fill(0); }
-  var gA = strToGrid(A);
-  var gB = gA.slice(1).concat([blankRow(gA[0].length)]); // shifted up 1 = a gentle bob
+  function strToGrid(rows, pal) {
+    return rows.map(function (line) {
+      return line.split("").map(function (ch) {
+        if (ch === "." || ch === " " || ch === "") return "";
+        return (pal && pal[ch]) || (ch === "#" ? "#d99a5b" : "#d99a5b");
+      });
+    });
+  }
+  function blankRow(c) { var a = []; for (var i = 0; i < c; i++) a.push(""); return a; }
 
-  var cols = 22, rows = 22;
+  var cols = 22, rows = 25;
+  var gA = strToGrid(QUOKKA, PAL);
+  var gB = gA.slice(1).concat([blankRow(cols)]); // bob up 1 row
   var frames = [gA.map(function (r) { return r.slice(); }), gB.map(function (r) { return r.slice(); })];
-  var active = 0, painting = false, paintVal = 1, playing = null;
+  var active = 0, painting = false, tool = "pencil", color = "#d99a5b", playing = null;
 
-  var gridEl = document.getElementById("grid");
-  var framesEl = document.getElementById("frames");
+  var gridEl = document.getElementById("grid"), framesEl = document.getElementById("framesEl");
 
-  function fit(grid) { // pad/crop a grid to cols x rows
+  // ---- swatches / color ----
+  function syncColor() { document.getElementById("curcolor").style.background = color; document.getElementById("picker").value = /^#[0-9a-f]{6}$/i.test(color) ? color : "#d99a5b"; renderSwatches(); }
+  function renderSwatches() {
+    var box = document.getElementById("swatches"); box.innerHTML = "";
+    SWATCHES.forEach(function (c) {
+      var d = document.createElement("div"); d.className = "sw" + (c.toLowerCase() === color.toLowerCase() ? " active" : "");
+      d.style.background = c; d.title = c; d.onclick = function () { color = c; syncColor(); };
+      box.appendChild(d);
+    });
+  }
+  document.getElementById("picker").oninput = function () { color = this.value; syncColor(); };
+  document.querySelectorAll(".tool").forEach(function (b) {
+    b.onclick = function () { tool = b.dataset.tool; document.querySelectorAll(".tool").forEach(function (x) { x.classList.remove("active"); }); b.classList.add("active"); };
+  });
+
+  function fit(grid) {
     var out = [];
-    for (var r = 0; r < rows; r++) {
-      var row = [];
-      for (var c = 0; c < cols; c++) row.push((grid[r] && grid[r][c]) ? 1 : 0);
-      out.push(row);
-    }
+    for (var r = 0; r < rows; r++) { var row = []; for (var c = 0; c < cols; c++) row.push((grid[r] && grid[r][c]) || ""); out.push(row); }
     return out;
   }
   function curr() { return frames[active]; }
@@ -159,38 +197,56 @@
     var prev = active > 0 ? frames[active - 1] : null;
     for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
       var d = document.createElement("div");
-      d.className = "cell" + (curr()[r][c] ? " on" : "") + (prev && prev[r][c] ? " prev" : "");
+      d.className = "cell" + (prev && prev[r][c] ? " prev" : "");
+      if (curr()[r][c]) d.style.background = curr()[r][c];
       d.dataset.r = r; d.dataset.c = c;
       gridEl.appendChild(d);
     }
     gridEl.classList.toggle("onion", document.getElementById("onion").checked);
   }
-  function setCell(r, c, v) { curr()[r][c] = v; var i = r * cols + c; gridEl.children[i].classList.toggle("on", !!v); }
+  function paintCell(r, c) {
+    var el = gridEl.children[r * cols + c];
+    if (tool === "eraser") { curr()[r][c] = ""; el.style.background = ""; }
+    else { curr()[r][c] = color; el.style.background = color; }
+  }
+  function floodFill(r, c) {
+    var target = curr()[r][c], repl = (tool === "eraser") ? "" : color;
+    if (target === repl) return;
+    var st = [[r, c]];
+    while (st.length) {
+      var p = st.pop(), y = p[0], x = p[1];
+      if (y < 0 || x < 0 || y >= rows || x >= cols) continue;
+      if (curr()[y][x] !== target) continue;
+      curr()[y][x] = repl;
+      st.push([y + 1, x], [y - 1, x], [y, x + 1], [y, x - 1]);
+    }
+    buildGrid();
+  }
 
   gridEl.addEventListener("mousedown", function (e) {
     if (!e.target.dataset.r) return;
     var r = +e.target.dataset.r, c = +e.target.dataset.c;
-    paintVal = curr()[r][c] ? 0 : 1; painting = true; setCell(r, c, paintVal); drawThumbs(); e.preventDefault();
+    if (tool === "picker") { if (curr()[r][c]) { color = curr()[r][c]; syncColor(); } return; }
+    if (tool === "fill") { floodFill(r, c); drawThumbs(); return; }
+    painting = true; paintCell(r, c); drawThumbs(); e.preventDefault();
   });
   gridEl.addEventListener("mouseover", function (e) {
     if (!painting || !e.target.dataset.r) return;
-    setCell(+e.target.dataset.r, +e.target.dataset.c, paintVal);
+    paintCell(+e.target.dataset.r, +e.target.dataset.c);
   });
   window.addEventListener("mouseup", function () { if (painting) { painting = false; drawThumbs(); } });
 
-  // ----- frame thumbnails -----
+  // ---- thumbnails / preview ----
   function drawCanvas(cv, grid, scale) {
     cv.width = cols * scale; cv.height = rows * scale;
     var x = cv.getContext("2d");
     x.fillStyle = "#0d0d0d"; x.fillRect(0, 0, cv.width, cv.height);
-    x.fillStyle = "#d99a5b";
-    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) if (grid[r][c]) x.fillRect(c * scale, r * scale, scale, scale);
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) if (grid[r][c]) { x.fillStyle = grid[r][c]; x.fillRect(c * scale, r * scale, scale, scale); }
   }
   function drawThumbs() {
     framesEl.innerHTML = "";
     frames.forEach(function (g, i) {
-      var wrap = document.createElement("div");
-      wrap.className = "frame" + (i === active ? " active" : "");
+      var wrap = document.createElement("div"); wrap.className = "frame" + (i === active ? " active" : "");
       var cv = document.createElement("canvas"); drawCanvas(cv, g, 3);
       var n = document.createElement("div"); n.className = "n"; n.textContent = i;
       wrap.appendChild(cv); wrap.appendChild(n);
@@ -199,7 +255,7 @@
     });
   }
 
-  // ----- controls -----
+  // ---- controls ----
   document.getElementById("resize").onclick = function () {
     cols = Math.max(4, Math.min(48, +document.getElementById("cols").value));
     rows = Math.max(4, Math.min(48, +document.getElementById("rows").value));
@@ -209,19 +265,17 @@
   document.getElementById("onion").onchange = buildGrid;
   function shift(dr, dc) {
     var g = curr(), out = [];
-    for (var r = 0; r < rows; r++) { var row = []; for (var c = 0; c < cols; c++) { var sr = r - dr, sc = c - dc; row.push((sr >= 0 && sr < rows && sc >= 0 && sc < cols) ? g[sr][sc] : 0); } out.push(row); }
+    for (var r = 0; r < rows; r++) { var row = []; for (var c = 0; c < cols; c++) { var sr = r - dr, sc = c - dc; row.push((sr >= 0 && sr < rows && sc >= 0 && sc < cols) ? g[sr][sc] : ""); } out.push(row); }
     frames[active] = out; buildGrid(); drawThumbs();
   }
   document.getElementById("shl").onclick = function () { shift(0, -1); };
   document.getElementById("shr").onclick = function () { shift(0, 1); };
   document.getElementById("shu").onclick = function () { shift(-1, 0); };
   document.getElementById("shd").onclick = function () { shift(1, 0); };
-
   document.getElementById("addframe").onclick = function () { frames.splice(active + 1, 0, fit([])); active++; buildGrid(); drawThumbs(); };
   document.getElementById("dupframe").onclick = function () { frames.splice(active + 1, 0, curr().map(function (r) { return r.slice(); })); active++; buildGrid(); drawThumbs(); };
   document.getElementById("delframe").onclick = function () { if (frames.length <= 1) return; frames.splice(active, 1); active = Math.max(0, active - 1); buildGrid(); drawThumbs(); };
 
-  // ----- preview -----
   var pcv = document.getElementById("pcanvas"), pf = 0;
   function renderPreview(i) { drawCanvas(pcv, frames[i], Math.floor(120 / Math.max(cols, rows)) || 4); }
   document.getElementById("play").onclick = function () {
@@ -230,7 +284,7 @@
     playing = setInterval(function () { pf = (pf + 1) % frames.length; renderPreview(pf); }, +document.getElementById("speed").value || 1000);
   };
 
-  // ----- export / import -----
+  // ---- export / import (font = monochrome silhouette) ----
   function toSpec() {
     return {
       name: document.getElementById("name").value || "Mascot",
@@ -242,24 +296,24 @@
     var blob = new Blob([JSON.stringify(toSpec(), null, 2)], { type: "application/json" });
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mascot.json"; a.click();
   };
-  document.getElementById("copy").onclick = function () { navigator.clipboard.writeText(JSON.stringify(toSpec(), null, 2)); this.textContent = "Copied!"; var b = this; setTimeout(function () { b.textContent = "Copy JSON"; }, 1200); };
+  document.getElementById("copy").onclick = function () { navigator.clipboard.writeText(JSON.stringify(toSpec(), null, 2)); var b = this; b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy JSON"; }, 1200); };
   document.getElementById("import").onchange = function (e) {
     var f = e.target.files[0]; if (!f) return; var rd = new FileReader();
     rd.onload = function () {
       try {
-        var s = JSON.parse(rd.result); var fr = s.frames || [];
+        var s = JSON.parse(rd.result), fr = s.frames || [];
         rows = Math.max.apply(null, fr.map(function (x) { return x.length; }));
         cols = Math.max.apply(null, fr.map(function (x) { return Math.max.apply(null, x.map(function (r) { return r.length; })); }));
         document.getElementById("rows").value = rows; document.getElementById("cols").value = cols;
         if (s.name) document.getElementById("name").value = s.name;
         if (s.px) document.getElementById("px").value = s.px;
-        frames = fr.map(function (x) { return fit(strToGrid(x)); }); active = 0; buildGrid(); drawThumbs();
+        frames = fr.map(function (x) { return fit(strToGrid(x, null)); }); active = 0; buildGrid(); drawThumbs(); renderPreview(0);
       } catch (err) { alert("Bad JSON: " + err.message); }
     };
     rd.readAsText(f);
   };
 
-  buildGrid(); drawThumbs(); renderPreview(0);
+  syncColor(); buildGrid(); drawThumbs(); renderPreview(0);
 })();
 </script>
 </body>
