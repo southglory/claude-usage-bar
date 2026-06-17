@@ -26,7 +26,7 @@
 **Claude Multi-Account Usage** monitors your Claude Code usage in real time, without
 leaving the editor. Most status-bar extensions only track a single `~/.claude`; if you
 run more than one account — a personal and a work login, or any
-[cc-switch](https://github.com/farion1231/cc-switch) `ccp`/`ccw` setup — the others are
+[cc-switch](https://github.com/southglory/cc-switch) `ccp`/`ccw` setup — the others are
 invisible. This shows them **all**, side by side, and works even for an account you only
 ever use in a terminal.
 
@@ -115,6 +115,8 @@ Opens a per-account terminal without touching global state:
 
 1. **Env injection (default)** — no `command`: inject `CLAUDE_CONFIG_DIR`, then run `launchCommand` (default `claude`).
 2. **cc-switch wrapper** — `command: "ccw"` / `"ccp"`: run that wrapper as-is.
+
+> Here *cc-switch* means [`southglory/cc-switch`](https://github.com/southglory/cc-switch) — a small PowerShell module that defines `ccp`/`ccw`/`ccx` to run multiple Claude Code **accounts** via `CLAUDE_CONFIG_DIR` isolation. It only shares a name with the popular [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch), which is a different kind of tool: it switches API **vendors/providers** (Anthropic, Kimi, etc.), not accounts.
 
 ## Keybindings
 
