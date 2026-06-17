@@ -118,6 +118,8 @@ Opens a per-account terminal without touching global state:
 
 > Here *cc-switch* means [`southglory/cc-switch`](https://github.com/southglory/cc-switch) — a small PowerShell module that defines `ccp`/`ccw`/`ccx` to run multiple Claude Code **accounts** via `CLAUDE_CONFIG_DIR` isolation. It only shares a name with the popular [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch), which is a different kind of tool: it switches API **vendors/providers** (Anthropic, Kimi, etc.), not accounts.
 
+> **Works on Windows, macOS, and Linux.** The extension itself has no OS-specific code. Only the `ccp`/`ccw` wrappers are Windows/PowerShell-only — on macOS/Linux, just use the default env-injection mode (leave `command` empty), or set `command` to your own shell alias.
+
 ## Keybindings
 
 ```jsonc
