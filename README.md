@@ -2,57 +2,83 @@
 
 **English** · [한국어](README.ko.md)
 
-> See the **5h / 7d usage of every Claude account at once** in the VS Code status bar — with progress bars, color warnings, a breathing quokka mascot, and a token-cost dashboard.
+> Claude Code usage & token cost for **every account at once** — always visible in your VS Code status bar.
 
-Most Claude status-bar extensions only track a single `~/.claude`. If you run more
-than one account — a personal and a work login, or any [cc-switch](https://github.com/farion1231/cc-switch)
-`ccp`/`ccw` setup — the others are invisible. **Claude Multi-Account Usage** shows
-them all, side by side, and works even for an account you only ever use in a terminal.
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/southglory.claude-multi-usage?label=VS%20Marketplace&logo=visualstudiocode&color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/southglory.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/southglory.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
+[![Open VSX](https://img.shields.io/open-vsx/v/southglory/claude-multi-usage?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/southglory/claude-multi-usage)
+[![Release](https://img.shields.io/github/v/release/southglory/claude-usage-bar?color=4e94ce)](https://github.com/southglory/claude-usage-bar/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Free, MIT-licensed, and fully open source — it reads your local Claude credentials, so
-[every line is auditable](#privacy--why-its-open-source).
-
-**Multiple accounts on one line:**
+**Multiple accounts, side by side:**
 
 ![Multiple Claude accounts in the status bar](images/statusbar.png)
 
-**Hover any account for usage, resets, and quick actions:**
+**Hover for usage, resets, and quick actions:**
 
 ![Hover tooltip: usage bars, resets, and Dashboard / Terminal / Cache / Settings](images/tooltip.png)
+
+**A token-cost dashboard per account:**
+
+![Dashboard: usage, token cost, by-project, burn rate, and history](images/dashboard.png)
+
+## Overview
+
+**Claude Multi-Account Usage** monitors your Claude Code usage in real time, without
+leaving the editor. Most status-bar extensions only track a single `~/.claude`; if you
+run more than one account — a personal and a work login, or any
+[cc-switch](https://github.com/farion1231/cc-switch) `ccp`/`ccw` setup — the others are
+invisible. This shows them **all**, side by side, and works even for an account you only
+ever use in a terminal.
+
+It reads session data from each account's `projects/` folder locally (no extra network
+calls) and, for accounts without a cache file, queries the Anthropic API for rate-limit
+utilization headers. All token costs are calculated client-side from configurable
+per-token rates (defaults: Claude Sonnet 4.x pricing).
+
+> [!NOTE]
+> **API calls are minimal and stop when you do.** For an account that has no local
+> usage cache, the rate-limit fetch fires **at most once every 5 minutes**, and after
+> the first reading only when that account's session logs were updated within the
+> window — so when you stop using Claude Code, the extension stops calling the API.
+> Each call is a ~1-token `claude-haiku-4-5` request (≈ **$0.0001**); typical cost is
+> **< $0.01 / month**. Set `claudeMultiUsage.fetchUsageViaApi: false` to make zero API
+> calls (cache-only). Tune the cadence with `claudeMultiUsage.apiMinIntervalSeconds`.
+
+> [!WARNING]
+> **Cost figures are estimates.** They are the *API-equivalent value* of your token
+> counts (which are exact), not your actual subscription bill, and they assume one price
+> tier for all models. Defaults follow Anthropic's published Sonnet pricing at the time
+> of writing — if pricing changes, update `claudeMultiUsage.pricing.*` to match the
+> latest rates on the [Anthropic pricing page](https://www.anthropic.com/pricing).
 
 ## Features
 
 - **N accounts, side by side** — no hard-coded names, no limit.
-- **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home. Labels show the **folder name as-is** (`.claude`, `.claude-work`) — no parsing, no imposed convention. Rename them to anything you like.
-- **Add & log in from the dashboard** — add a second `.claude-…` account by name and open a terminal to sign in for the first time, all from the panel.
-- **Progress bars** — a clean, uniform-height bar per account next to the 5h · 7d percentages (see the screenshot above).
-- **Color thresholds** — green → yellow → red as usage rises; shows a reset countdown when the limit is reached.
-- **Breathing quokka mascot** — a tiny 2-frame pixel quokka that bobs up and down (toggle/replace via settings).
-- **Usage dashboard** — one clean card per account: today's spend, 5h/7d bars, and **token-cost tiles** (5h / today / 7d / month). A single **Details** expander reveals the 5h token breakdown, per-project costs, a 30-day history sparkline, and avg cost by hour. Cost = token counts (read from the session logs) × pricing — an API-equivalent estimate, not your subscription bill.
-- **Per-account terminal** — open a Claude terminal with that account's `CLAUDE_CONFIG_DIR` injected. No global switching — run several accounts at once.
+- **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home. Labels are the **folder name as-is** (`.claude`, `.claude-work`) — no parsing. Rename freely.
+- **Works for terminal-only accounts** — fetches usage from the API when no cache file exists (see Overview).
+- **Color warnings on both windows** — green → yellow → red; if 7d is maxed while 5h is fine, the bar still flips red and shows the 7d reset countdown.
+- **Token-cost dashboard** — per-account today's spend, 5h/7d bars, cost tiles (5h / today / 7d / month), and a **Details** drawer with the 5h token breakdown, per-project costs, a 30-day history sparkline, and avg cost by hour.
+- **Per-account terminal** — open a Claude terminal with that account's `CLAUDE_CONFIG_DIR` injected. Run several at once; no global switching.
 - **cc-switch friendly** — set `command: "ccw"` / `"ccp"` to run your existing wrapper as-is.
+- **Breathing quokka mascot** — a tiny pixel quokka (toggle/replace, or [draw your own](#make-your-own-mascot)).
 
 ## Data source
 
 Per account, usage comes from one of two sources (in order):
 
-1. **Cache file** — `<CLAUDE_CONFIG_DIR>/vscode-claude-status-cache.json`, written by Claude Code's VS Code integration. Free to read, but Claude Code only writes it for the **one** account VS Code polls — a second account used only in a terminal never gets one.
+1. **Cache file** — `<CLAUDE_CONFIG_DIR>/vscode-claude-status-cache.json`, written by Claude Code's VS Code integration. Free to read, but written for the **one** account VS Code polls — a terminal-only account never gets one.
+2. **API fallback** (`fetchUsageViaApi`, on by default) — read the account's `.credentials.json` OAuth token and fetch usage from `api.anthropic.com` via the rate-limit response headers (see the Note above for cost/cadence).
 
-   ```jsonc
-   { "usageData": { "utilization5h": 0.29, "utilization7d": 0.04,
-                    "reset5hAt": 1781493600, "reset7dAt": 1782054000,
-                    "limitStatus": "allowed" } }
-   ```
-
-2. **API fallback** (`fetchUsageViaApi`, on by default) — if there's no cache file, read the account's `.credentials.json` OAuth token and fetch its usage straight from `api.anthropic.com` via the rate-limit response headers (the method `long-kudo.vscode-claude-status` uses). This is the only way to show a second account's usage. It sends a tiny 1-token request per refresh; the tooltip shows `via API` vs `via cache`. Turn it off to use cache files only.
-
-If an account has neither a cache nor credentials yet, use **Log in** (dashboard or tooltip) to sign in and create `.credentials.json`.
+Token cost is computed by scanning `projects/**` session logs for exact token counts ×
+your configured pricing.
 
 ## Install
 
-- **Dev run**: open this folder in VS Code and press `F5` (Extension Development Host).
-- **From VSIX**: `code --install-extension southglory.claude-multi-usage-0.5.0.vsix` (or Extensions panel → ⋯ → *Install from VSIX…*).
-- **Marketplace**: search "Claude Multi-Account Usage" (once published).
+- **Marketplace**: search **"Claude Multi-Account Usage"**, or `ext install southglory.claude-multi-usage`.
+- **From VSIX**: download from [Releases](https://github.com/southglory/claude-usage-bar/releases) → `code --install-extension claude-multi-usage-0.6.0.vsix`.
+- **Dev run**: open this folder and press `F5`.
 
 ## Configure (`settings.json`)
 
@@ -63,38 +89,33 @@ If an account has neither a cache nor credentials yet, use **Log in** (dashboard
   // labels are free text — name them whatever you like
 ],
 "claudeMultiUsage.refreshIntervalSeconds": 30,
-"claudeMultiUsage.progressBarLength": 8,
-"claudeMultiUsage.warnAt": 0.5,            // yellow threshold
-"claudeMultiUsage.critAt": 0.9,            // red threshold
+"claudeMultiUsage.warnAt": 0.5,                // yellow threshold
+"claudeMultiUsage.critAt": 0.9,                // red threshold
 "claudeMultiUsage.show7d": true,
-"claudeMultiUsage.showCharacter": true,    // breathing quokka mascot
-"claudeMultiUsage.enableAnimation": true,
-"claudeMultiUsage.launchCommand": "claude", // default for accounts without `command`
-"claudeMultiUsage.clickAction": "refresh"   // refresh | dashboard | launch | openCache
+"claudeMultiUsage.fetchUsageViaApi": true,     // usage for cache-less accounts
+"claudeMultiUsage.apiMinIntervalSeconds": 300, // min 5 min between API fetches
+"claudeMultiUsage.pricing.inputPerMillion": 3, // cost-estimate rates (USD / 1M)
+"claudeMultiUsage.clickAction": "refresh"      // refresh | dashboard | launch | openCache
 ```
 
-`dir` expands `~`, `%USERPROFILE%`, `${env:VAR}`. Auto-detect runs only when the list
-is empty. Each account shows as `<quokka> <label> <bar> <5h>% · <7d>%` (see the
-status-bar screenshot above) — the first % is the 5h window, the second is 7d.
-
-**Left-click** runs `clickAction` (refresh by default). The hover tooltip has
-clickable **Dashboard · Terminal · Cache · Settings** links — VS Code does not support
-a custom right-click menu on status bar items, so these live in the tooltip.
+`dir` expands `~`, `%USERPROFILE%`, `${env:VAR}`. Auto-detect runs only when the list is
+empty. **Left-click** runs `clickAction`; the hover tooltip has **Dashboard · Terminal ·
+Cache · Settings** links (VS Code doesn't support a custom right-click menu on status
+bar items).
 
 ## Add an account & first login
 
-Open the **dashboard** (tooltip → *Dashboard*, or the *Open Usage Dashboard* command):
-
-1. Under **Add account**, type a label (shown as-is, e.g. `.claude-work`) and a config dir (e.g. `~/.claude-work`).
-2. **Add & log in** saves it and opens a terminal with `CLAUDE_CONFIG_DIR` set to that dir, then runs `claude` — a brand-new directory will prompt you to sign in. (**Add only** skips the terminal.)
-3. Each account card also has **Log in** (re-auth), **Open terminal**, **Cache file**, and **Remove**.
+Open the **dashboard** (tooltip → *Dashboard*), expand **+ Add account**, enter a label
+and config dir, then **Add & log in** — it opens a terminal with `CLAUDE_CONFIG_DIR` set
+and runs `claude`, so a brand-new directory prompts you to sign in. Each card also has
+**Log in**, **Open terminal**, and **Remove**.
 
 ## Account switching (cc-switch built in)
 
-Opens a per-account terminal without touching global state. Two launch modes:
+Opens a per-account terminal without touching global state:
 
-1. **Env injection (default)** — no `command`: inject `CLAUDE_CONFIG_DIR`, then run `launchCommand` (default `claude`). Works even without `ccw/ccp` aliases.
-2. **cc-switch wrapper as-is** — `command: "ccw"` / `"ccp"`: run that wrapper directly (same as typing `ccw` in a normal terminal).
+1. **Env injection (default)** — no `command`: inject `CLAUDE_CONFIG_DIR`, then run `launchCommand` (default `claude`).
+2. **cc-switch wrapper** — `command: "ccw"` / `"ccp"`: run that wrapper as-is.
 
 ## Keybindings
 
@@ -103,16 +124,10 @@ Opens a per-account terminal without touching global state. Two launch modes:
 { "key": "ctrl+alt+0", "command": "claudeMultiUsage.launch" }            // no args → picker
 ```
 
-## Commands
-
-`Claude Multi Usage: Open Usage Dashboard` · `Refresh` · `Open Settings` ·
-`Open Cache File` · `Claude: Open Terminal for Account` · `Add Account` · `Remove Account`
-
 ## Make your own mascot
 
-Don't like the quokka? Draw your own. Open **`tools/mascot-maker.html`** in any
-browser — a pixel editor where you paint each animation frame, onion-skin the
-previous one, and preview the loop.
+Don't like the quokka? Draw your own. Open **`tools/mascot-maker.html`** in any browser —
+a pixel editor where you paint each frame, onion-skin the previous one, and preview the loop.
 
 ![Mascot Maker: pixel editor with frames and live animation preview](images/mascot-maker.png)
 
@@ -122,41 +137,27 @@ Export `mascot.json`, then build a font:
 uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf mascot
 ```
 
-That prints the `contributes.icons` block and the `characterFrames` value to paste
-in. Drop `mascot.ttf` next to `package.json`, repackage, and your mascot animates in
-the status bar.
+It prints the `contributes.icons` block and `characterFrames` value to paste in. Drop
+`mascot.ttf` next to `package.json` and repackage.
 
-> Pixel mascots need a bundled font (above). For a quick change without repackaging,
-> just set `claudeMultiUsage.characterFrames` to emojis/codicons, e.g. `["▃","▆"]`.
-
-The built-in quokka is generated the same way:
-
-```sh
-uv run --with fonttools python tools/build_quokka_font.py
-```
+> Pixel mascots need a bundled font. For a quick change without repackaging, set
+> `claudeMultiUsage.characterFrames` to emojis/codicons, e.g. `["▃","▆"]`.
 
 ## Privacy & why it's open source
 
-This extension reads sensitive local files — your accounts' `.credentials.json`
-OAuth tokens — to fetch usage. Because of that, it is **fully open source on
-purpose**: don't take my word for it, read the code.
+This extension reads sensitive local files — your accounts' `.credentials.json` OAuth
+tokens — to fetch usage. Because of that, it's **fully open source on purpose**: read
+the code, don't take my word for it.
 
-- **Your tokens never leave your machine** except to call **`api.anthropic.com`**
-  directly (the same endpoint Claude Code uses), only to read your own usage. There
-  is **no third-party server, no telemetry, no analytics.**
-- The API fallback is **opt-out** — set `claudeMultiUsage.fetchUsageViaApi: false`
-  to use only the local cache files and make zero network calls.
-- All it ever reads under each config dir: `vscode-claude-status-cache.json`,
-  `.credentials.json`, and `projects/**` token counts (for the cost estimate).
-
-If you spot anything off, open an issue or PR — that's the point of MIT.
+- **Your tokens never leave your machine** except to call **`api.anthropic.com`** directly (the endpoint Claude Code uses), only to read your own usage. **No third-party server, no telemetry, no analytics.**
+- The API fallback is **opt-out** (`fetchUsageViaApi: false`) and rate-limited (see the Note).
+- All it reads under each config dir: `vscode-claude-status-cache.json`, `.credentials.json`, and `projects/**` token counts.
 
 ## Contributing
 
-Issues and pull requests welcome at
-<https://github.com/southglory/claude-usage-bar>. The extension is plain
-JavaScript (no build step); the mascot font and `.vsix` are generated by the
-scripts in `tools/`.
+Issues and PRs welcome at <https://github.com/southglory/claude-usage-bar>. Plain
+JavaScript (no build step); the mascot font and `.vsix` are generated by the scripts in
+`tools/`.
 
 ---
 

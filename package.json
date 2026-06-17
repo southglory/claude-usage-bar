@@ -2,7 +2,7 @@
   "name": "claude-multi-usage",
   "displayName": "Claude Multi-Account Usage",
   "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "icon": "icon.png",
   "publisher": "southglory",
   "author": "southglory",
@@ -68,7 +68,11 @@
         },
         "claudeMultiUsage.fetchUsageViaApi": {
           "type": "boolean", "default": true,
-          "markdownDescription": "When an account has no `vscode-claude-status-cache.json` (the Claude Code VS Code integration only writes it for the one account it polls), fetch that account's usage directly from the Anthropic API using its `.credentials.json` OAuth token and the rate-limit response headers — the same method `long-kudo.vscode-claude-status` uses. This is the only way to show usage for a second account used only in a terminal. Sends a tiny 1-token request per refresh; disable to use cache files only."
+          "markdownDescription": "When an account has no `vscode-claude-status-cache.json` (the Claude Code VS Code integration only writes it for the one account it polls), fetch that account's usage directly from the Anthropic API using its `.credentials.json` OAuth token and the rate-limit response headers — the same method `long-kudo.vscode-claude-status` uses. This is the only way to show usage for a second account used only in a terminal. Sends a tiny ~1-token request (≈$0.0001); disable to use cache files only."
+        },
+        "claudeMultiUsage.apiMinIntervalSeconds": {
+          "type": "number", "default": 300, "minimum": 60,
+          "markdownDescription": "Minimum seconds between API usage fetches per account (default 5 min). After the first reading, the API is only called again when that account was actually used within this window — so when you stop using Claude Code, the calls stop. Only applies when `fetchUsageViaApi` is on."
         },
         "claudeMultiUsage.showCharacter": {
           "type": "boolean", "default": true,

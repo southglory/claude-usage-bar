@@ -288,6 +288,25 @@ function scanCost(dir, pricing, now) {
   return res;
 }
 
+/** True if any session log under <dir>/projects was modified within `withinMs` —
+ *  i.e. Claude Code was used on this account recently. Cheap (stat only, early-out). */
+function recentlyActive(dir, withinMs) {
+  const root = path.join(dir, 'projects');
+  const cutoff = Date.now() - withinMs;
+  let pds;
+  try { pds = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return false; }
+  for (const pd of pds) {
+    if (!pd.isDirectory()) continue;
+    let files;
+    try { files = fs.readdirSync(path.join(root, pd.name)); } catch (e) { continue; }
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      try { if (fs.statSync(path.join(root, pd.name, f)).mtimeMs >= cutoff) return true; } catch (e) {}
+    }
+  }
+  return false;
+}
+
 class Bar {
   constructor() {
     /** @type {vscode.StatusBarItem[]} */
@@ -321,6 +340,7 @@ class Bar {
       launchCommand: c.get('launchCommand', 'claude'),
       clickAction: c.get('clickAction', 'refresh'),
       apiFallback: c.get('fetchUsageViaApi', true),
+      apiMinInterval: (c.get('apiMinIntervalSeconds', 300)) * 1000,
       pricing: {
         in: c.get('pricing.inputPerMillion', 3),
         out: c.get('pricing.outputPerMillion', 15),
@@ -345,12 +365,16 @@ class Bar {
       .finally(() => { slot.pending = false; slot.ts = Date.now(); this.updateDashboard(); });
   }
 
-  /** Throttled background API fetch for an account with no cache file. Stores the
-   *  result in this._api[dir] and re-renders when it resolves. */
-  ensureApiUsage(dir, interval) {
+  /** Background API fetch for an account with no cache file — kept deliberately
+   *  light: at most once per `minIntervalMs` (default 5 min), and once we already
+   *  have a reading we only refetch when the account was actually used within that
+   *  window. So when you stop using Claude Code, the API calls stop too. */
+  ensureApiUsage(dir, minIntervalMs) {
     const slot = this._api[dir] || (this._api[dir] = {});
     if (slot.pending) return;
-    if (slot.ts && Date.now() - slot.ts < Math.max(15000, interval)) return; // throttle
+    const now = Date.now();
+    if (slot.ts && now - slot.ts < minIntervalMs) return;            // throttle
+    if (slot.data && !recentlyActive(dir, minIntervalMs)) return;     // idle → don't poll
     slot.pending = true;
     fetchUsageViaApi(dir)
       .then((data) => { slot.data = data; slot.updatedAt = new Date().toISOString(); slot.error = null; })
@@ -538,7 +562,7 @@ class Bar {
   }
 
   refresh() {
-    const { accounts, warnAt, critAt, show7d, barLen, showChar, frames, apiFallback, interval } = this.config();
+    const { accounts, warnAt, critAt, show7d, barLen, showChar, frames, apiFallback, apiMinInterval } = this.config();
     this.showChar = showChar;
     this.frames = frames && frames.length ? frames : FALLBACK_FRAMES.slice();
     if (accounts.length !== this.items.length) this.rebuild();
@@ -560,7 +584,7 @@ class Bar {
       const slot = this._api[dir];
       if (!data && apiFallback) {
         if (slot && slot.data) { data = slot.data; updatedAt = slot.updatedAt; source = 'api'; }
-        if (readToken(dir).token) this.ensureApiUsage(dir, interval); // refresh in background
+        if (readToken(dir).token) this.ensureApiUsage(dir, apiMinInterval); // refresh in background (polite)
       }
 
       if (!data) {
