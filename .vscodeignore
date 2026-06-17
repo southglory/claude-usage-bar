@@ -1,4 +1,5 @@
 .vscode/**
+.claude/**
 .gitignore
 .vscodeignore
 **/*.map

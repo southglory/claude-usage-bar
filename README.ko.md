@@ -4,10 +4,10 @@
 
 > Claude Code 사용량과 토큰 비용을 **여러 계정 동시에** — VS Code 상태바에서 항상 보이게.
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/southglory.claude-multi-usage?label=VS%20Marketplace&logo=visualstudiocode&color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/southglory.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/southglory.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=southglory.claude-multi-usage)
-[![Open VSX](https://img.shields.io/open-vsx/v/southglory/claude-multi-usage?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/southglory/claude-multi-usage)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/QG-devramyun.claude-multi-usage?label=VS%20Marketplace&logo=visualstudiocode&color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/QG-devramyun.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/QG-devramyun.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
+[![Open VSX](https://img.shields.io/open-vsx/v/QG-devramyun/claude-multi-usage?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/QG-devramyun/claude-multi-usage)
 [![Release](https://img.shields.io/github/v/release/southglory/claude-usage-bar?color=4e94ce)](https://github.com/southglory/claude-usage-bar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -71,7 +71,7 @@
 
 ## 설치
 
-- **마켓플레이스**: **"Claude Multi-Account Usage"** 검색 또는 `ext install southglory.claude-multi-usage`.
+- **마켓플레이스**: **"Claude Multi-Account Usage"** 검색 또는 `ext install QG-devramyun.claude-multi-usage`.
 - **VSIX**: [Releases](https://github.com/southglory/claude-usage-bar/releases) 에서 받아 `code --install-extension claude-multi-usage-0.6.0.vsix`.
 - **개발 실행**: 폴더를 열고 `F5`.
 
@@ -179,7 +179,9 @@ VS Code 인스턴스가 폰트를 다시 로드해야 합니다:
 
 소스는 [MIT](LICENSE) © southglory — 자유롭게 읽고·사용·포크·수정하세요.
 
+> 마켓플레이스 / Open VSX 퍼블리셔 **`QG-devramyun`** 과 작성자 **`southglory`**(GitHub)는 **동일인**입니다 — 타인의 작업을 재업로드한 것이 아닙니다.
+
 **단, 이 확장(또는 이름만 바꾼 파생본)을 VS Code 마켓플레이스·Open VSX·기타 확장 스토어에
-다시 게시하지 말아 주세요.** **공식 퍼블리셔는 `southglory` 단독입니다.** (마켓플레이스도
+다시 게시하지 말아 주세요.** **공식 퍼블리셔는 `QG-devramyun`(= `southglory`) 단독입니다.** (마켓플레이스도
 사칭·중복 게시를 금지하며, "Claude" 는 Anthropic 의 상표입니다.) 개인용 포크와 PR 은 언제든
 환영합니다 — 경쟁 리스팅으로 올리지만 말아 주세요.

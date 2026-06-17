@@ -1,10 +1,10 @@
 {
   "name": "claude-multi-usage",
-  "displayName": "Claude Multi-Account Usage",
+  "displayName": "Claude Multi-Account Status Bar",
   "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "icon": "icon.png",
-  "publisher": "southglory",
+  "publisher": "QG-devramyun",
   "author": "southglory",
   "repository": { "type": "git", "url": "https://github.com/southglory/claude-usage-bar.git" },
   "homepage": "https://github.com/southglory/claude-usage-bar#readme",
@@ -30,7 +30,7 @@
       "quokka-1": { "description": "Quokka mascot — breathing frame 2 (bob up)", "default": { "fontPath": "quokka.ttf", "fontCharacter": "\\E002" } }
     },
     "configuration": {
-      "title": "Claude Multi-Account Usage",
+      "title": "Claude Multi-Account Status Bar",
       "properties": {
         "claudeMultiUsage.accounts": {
           "type": "array",
