@@ -4,6 +4,12 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] — 2026-06-18
+
+### Changed
+- Docs only: `cc-switch` links now point to [`southglory/cc-switch`](https://github.com/southglory/cc-switch) (the tool that defines the `ccp`/`ccw`/`ccx` account wrappers), with a note clarifying it is distinct from the similarly-named vendor/provider switcher `farion1231/cc-switch`.
+- README: added direct **Marketplace** and **Open VSX** install links; trimmed duplicate Marketplace badges (kept version only).
+
 ## [0.6.2] — 2026-06-17
 
 ### Changed
@@ -60,6 +66,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.6.3]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.3
 [0.6.2]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.2
 [0.6.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.0
 [0.5.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.5.0
