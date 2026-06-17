@@ -5,8 +5,6 @@
 > Claude Code usage & token cost for **every account at once** — always visible in your VS Code status bar.
 
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/QG-devramyun.claude-multi-usage?label=VS%20Marketplace&logo=visualstudiocode&color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/QG-devramyun.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/QG-devramyun.claude-multi-usage?color=2d7d9a)](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage)
 [![Open VSX](https://img.shields.io/open-vsx/v/QG-devramyun/claude-multi-usage?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/QG-devramyun/claude-multi-usage)
 [![Release](https://img.shields.io/github/v/release/southglory/claude-usage-bar?color=4e94ce)](https://github.com/southglory/claude-usage-bar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
