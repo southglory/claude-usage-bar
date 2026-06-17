@@ -106,9 +106,24 @@ Opens a per-account terminal without touching global state. Two launch modes:
 `Claude Multi Usage: Open Usage Dashboard` · `Refresh` · `Open Settings` ·
 `Open Cache File` · `Claude: Open Terminal for Account` · `Add Account` · `Remove Account`
 
-## Build the mascot font
+## Make your own mascot
 
-The quokka icon font is generated from a sprite:
+Don't like the quokka? Draw your own. Open **`tools/mascot-maker.html`** in any
+browser — a pixel editor where you paint each animation frame, onion-skin the
+previous one, and preview the loop. Export `mascot.json`, then build a font:
+
+```sh
+uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf mascot
+```
+
+That prints the `contributes.icons` block and the `characterFrames` value to paste
+in. Drop `mascot.ttf` next to `package.json`, repackage, and your mascot animates in
+the status bar.
+
+> Pixel mascots need a bundled font (above). For a quick change without repackaging,
+> just set `claudeMultiUsage.characterFrames` to emojis/codicons, e.g. `["▃","▆"]`.
+
+The built-in quokka is generated the same way:
 
 ```sh
 uv run --with fonttools python tools/build_quokka_font.py

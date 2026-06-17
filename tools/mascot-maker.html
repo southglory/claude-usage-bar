@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mascot Maker — Claude Multi-Account Usage</title>
+<style>
+  :root { --bg:#1e1e1e; --fg:#e6e6e6; --dim:#9aa0a6; --line:#3a3a3a; --accent:#4e94ce; --fill:#d99a5b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:18px; } .sub { color:var(--dim); font-size:12px; margin-top:2px; }
+  main { display:flex; gap:24px; padding:20px; flex-wrap:wrap; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .panel { border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel h2 { margin:0 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); }
+  #grid { display:grid; gap:1px; background:var(--line); border:1px solid var(--line); width:max-content; touch-action:none; }
+  #grid .cell { width:18px; height:18px; background:#262626; cursor:crosshair; }
+  #grid .cell.on { background:var(--fill); }
+  #grid.onion .cell.prev { box-shadow: inset 0 0 0 18px rgba(217,154,91,.18); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  label { color:var(--dim); font-size:12px; }
+  input[type=number] { width:56px; background:#262626; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:4px 6px; }
+  button { font:inherit; font-size:13px; border:1px solid var(--line); background:#2d2d2d; color:var(--fg); border-radius:7px; padding:6px 12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#08233a; font-weight:600; }
+  .frames { display:flex; gap:8px; flex-wrap:wrap; }
+  .frame { border:2px solid var(--line); border-radius:8px; padding:4px; cursor:pointer; background:#161616; }
+  .frame.active { border-color:var(--accent); }
+  .frame canvas { display:block; image-rendering:pixelated; background:#0d0d0d; border-radius:3px; }
+  .frame .n { text-align:center; font-size:10px; color:var(--dim); }
+  #preview { background:#111; border-radius:8px; padding:14px; display:flex; align-items:center; justify-content:center; }
+  #preview canvas { image-rendering:pixelated; }
+  pre { background:#111; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:11px; color:var(--dim); max-width:380px; }
+  code { background:#111; padding:1px 5px; border-radius:4px; }
+  a { color:var(--accent); }
+  .hint { color:var(--dim); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 Mascot Maker</h1>
+  <div class="sub">Draw a pixel mascot, design its animation frames, export — then build a font for the status bar.</div>
+</header>
+
+<main>
+  <!-- Drawing -->
+  <div class="col">
+    <div class="panel">
+      <h2>Canvas</h2>
+      <div class="row" style="margin-bottom:10px">
+        <label>W <input type="number" id="cols" min="4" max="48" value="22"></label>
+        <label>H <input type="number" id="rows" min="4" max="48" value="22"></label>
+        <button id="resize">Resize</button>
+        <button id="clear">Clear</button>
+        <span style="flex:1"></span>
+        <button id="shl" title="shift left">←</button>
+        <button id="shr" title="shift right">→</button>
+        <button id="shu" title="shift up">↑</button>
+        <button id="shd" title="shift down">↓</button>
+      </div>
+      <div id="grid"></div>
+      <div class="row" style="margin-top:8px">
+        <label><input type="checkbox" id="onion" checked> onion-skin previous frame</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frames + preview -->
+  <div class="col">
+    <div class="panel">
+      <h2>Frames (animation)</h2>
+      <div class="frames" id="frames"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="addframe">+ Frame</button>
+        <button id="dupframe">Duplicate</button>
+        <button id="delframe">Delete</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Preview</h2>
+      <div id="preview"><canvas id="pcanvas" width="120" height="120"></canvas></div>
+      <div class="row" style="margin-top:10px">
+        <button id="play">▶ Play</button>
+        <label>speed <input type="number" id="speed" min="100" max="3000" step="100" value="1000"> ms/frame</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export -->
+  <div class="col">
+    <div class="panel">
+      <h2>Export</h2>
+      <div class="row">
+        <label>name <input type="text" id="name" value="Quokka" style="width:120px;background:#262626;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px"></label>
+        <label>px <input type="number" id="px" value="36" min="8" max="64"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" id="download">⬇ Download mascot.json</button>
+        <button id="copy">Copy JSON</button>
+        <label class="hint" style="cursor:pointer">Import… <input type="file" id="import" accept=".json" style="display:none"></label>
+      </div>
+      <h2 style="margin-top:16px">Then build the font</h2>
+      <pre>uv run --with fonttools \
+  python tools/build_mascot_font.py \
+  mascot.json mascot.ttf mascot</pre>
+      <div class="hint">
+        That prints the <code>contributes.icons</code> block and the
+        <code>characterFrames</code> value to paste into the extension. Drop
+        <code>mascot.ttf</code> next to <code>package.json</code>, repackage, and your
+        mascot animates in the status bar.<br><br>
+        <b>No rebuild?</b> Pixel mascots need a bundled font (above). For a quick change
+        without rebuilding, set <code>claudeMultiUsage.characterFrames</code> to emojis
+        or codicons, e.g. <code>["▃","▆"]</code> or <code>["$(rocket)","$(flame)"]</code>.
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  // ----- default mascot (the quokka), frame B = A bobbed up one row -----
+  var A = [
+    ".....####...####......",".....####...####......","....##############....",
+    "....##############....","....##############....","....##############....",
+    "....##############....","....##############....","....##############....",
+    "...################...","...################...","..##################..",
+    ".####################.",".####################.","..##################..",
+    "..##################..","...################...","...################...",
+    "...################...","....##############....","....##############....",
+    ".....##........##....."
+  ];
+  function strToGrid(rows) { return rows.map(function (r) { return r.split("").map(function (c) { return c !== "." && c !== " " ? 1 : 0; }); }); }
+  function blankRow(c) { return Array(c).fill(0); }
+  var gA = strToGrid(A);
+  var gB = gA.slice(1).concat([blankRow(gA[0].length)]); // shifted up 1 = a gentle bob
+
+  var cols = 22, rows = 22;
+  var frames = [gA.map(function (r) { return r.slice(); }), gB.map(function (r) { return r.slice(); })];
+  var active = 0, painting = false, paintVal = 1, playing = null;
+
+  var gridEl = document.getElementById("grid");
+  var framesEl = document.getElementById("frames");
+
+  function fit(grid) { // pad/crop a grid to cols x rows
+    var out = [];
+    for (var r = 0; r < rows; r++) {
+      var row = [];
+      for (var c = 0; c < cols; c++) row.push((grid[r] && grid[r][c]) ? 1 : 0);
+      out.push(row);
+    }
+    return out;
+  }
+  function curr() { return frames[active]; }
+
+  function buildGrid() {
+    gridEl.style.gridTemplateColumns = "repeat(" + cols + ", 18px)";
+    gridEl.innerHTML = "";
+    var prev = active > 0 ? frames[active - 1] : null;
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+      var d = document.createElement("div");
+      d.className = "cell" + (curr()[r][c] ? " on" : "") + (prev && prev[r][c] ? " prev" : "");
+      d.dataset.r = r; d.dataset.c = c;
+      gridEl.appendChild(d);
+    }
+    gridEl.classList.toggle("onion", document.getElementById("onion").checked);
+  }
+  function setCell(r, c, v) { curr()[r][c] = v; var i = r * cols + c; gridEl.children[i].classList.toggle("on", !!v); }
+
+  gridEl.addEventListener("mousedown", function (e) {
+    if (!e.target.dataset.r) return;
+    var r = +e.target.dataset.r, c = +e.target.dataset.c;
+    paintVal = curr()[r][c] ? 0 : 1; painting = true; setCell(r, c, paintVal); drawThumbs(); e.preventDefault();
+  });
+  gridEl.addEventListener("mouseover", function (e) {
+    if (!painting || !e.target.dataset.r) return;
+    setCell(+e.target.dataset.r, +e.target.dataset.c, paintVal);
+  });
+  window.addEventListener("mouseup", function () { if (painting) { painting = false; drawThumbs(); } });
+
+  // ----- frame thumbnails -----
+  function drawCanvas(cv, grid, scale) {
+    cv.width = cols * scale; cv.height = rows * scale;
+    var x = cv.getContext("2d");
+    x.fillStyle = "#0d0d0d"; x.fillRect(0, 0, cv.width, cv.height);
+    x.fillStyle = "#d99a5b";
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) if (grid[r][c]) x.fillRect(c * scale, r * scale, scale, scale);
+  }
+  function drawThumbs() {
+    framesEl.innerHTML = "";
+    frames.forEach(function (g, i) {
+      var wrap = document.createElement("div");
+      wrap.className = "frame" + (i === active ? " active" : "");
+      var cv = document.createElement("canvas"); drawCanvas(cv, g, 3);
+      var n = document.createElement("div"); n.className = "n"; n.textContent = i;
+      wrap.appendChild(cv); wrap.appendChild(n);
+      wrap.onclick = function () { active = i; buildGrid(); drawThumbs(); };
+      framesEl.appendChild(wrap);
+    });
+  }
+
+  // ----- controls -----
+  document.getElementById("resize").onclick = function () {
+    cols = Math.max(4, Math.min(48, +document.getElementById("cols").value));
+    rows = Math.max(4, Math.min(48, +document.getElementById("rows").value));
+    frames = frames.map(fit); buildGrid(); drawThumbs();
+  };
+  document.getElementById("clear").onclick = function () { frames[active] = fit([]); buildGrid(); drawThumbs(); };
+  document.getElementById("onion").onchange = buildGrid;
+  function shift(dr, dc) {
+    var g = curr(), out = [];
+    for (var r = 0; r < rows; r++) { var row = []; for (var c = 0; c < cols; c++) { var sr = r - dr, sc = c - dc; row.push((sr >= 0 && sr < rows && sc >= 0 && sc < cols) ? g[sr][sc] : 0); } out.push(row); }
+    frames[active] = out; buildGrid(); drawThumbs();
+  }
+  document.getElementById("shl").onclick = function () { shift(0, -1); };
+  document.getElementById("shr").onclick = function () { shift(0, 1); };
+  document.getElementById("shu").onclick = function () { shift(-1, 0); };
+  document.getElementById("shd").onclick = function () { shift(1, 0); };
+
+  document.getElementById("addframe").onclick = function () { frames.splice(active + 1, 0, fit([])); active++; buildGrid(); drawThumbs(); };
+  document.getElementById("dupframe").onclick = function () { frames.splice(active + 1, 0, curr().map(function (r) { return r.slice(); })); active++; buildGrid(); drawThumbs(); };
+  document.getElementById("delframe").onclick = function () { if (frames.length <= 1) return; frames.splice(active, 1); active = Math.max(0, active - 1); buildGrid(); drawThumbs(); };
+
+  // ----- preview -----
+  var pcv = document.getElementById("pcanvas"), pf = 0;
+  function renderPreview(i) { drawCanvas(pcv, frames[i], Math.floor(120 / Math.max(cols, rows)) || 4); }
+  document.getElementById("play").onclick = function () {
+    if (playing) { clearInterval(playing); playing = null; this.textContent = "▶ Play"; return; }
+    var self = this; self.textContent = "⏸ Stop";
+    playing = setInterval(function () { pf = (pf + 1) % frames.length; renderPreview(pf); }, +document.getElementById("speed").value || 1000);
+  };
+
+  // ----- export / import -----
+  function toSpec() {
+    return {
+      name: document.getElementById("name").value || "Mascot",
+      px: +document.getElementById("px").value || 36,
+      frames: frames.map(function (g) { return g.map(function (row) { return row.map(function (v) { return v ? "#" : "."; }).join(""); }); })
+    };
+  }
+  document.getElementById("download").onclick = function () {
+    var blob = new Blob([JSON.stringify(toSpec(), null, 2)], { type: "application/json" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mascot.json"; a.click();
+  };
+  document.getElementById("copy").onclick = function () { navigator.clipboard.writeText(JSON.stringify(toSpec(), null, 2)); this.textContent = "Copied!"; var b = this; setTimeout(function () { b.textContent = "Copy JSON"; }, 1200); };
+  document.getElementById("import").onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return; var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var s = JSON.parse(rd.result); var fr = s.frames || [];
+        rows = Math.max.apply(null, fr.map(function (x) { return x.length; }));
+        cols = Math.max.apply(null, fr.map(function (x) { return Math.max.apply(null, x.map(function (r) { return r.length; })); }));
+        document.getElementById("rows").value = rows; document.getElementById("cols").value = cols;
+        if (s.name) document.getElementById("name").value = s.name;
+        if (s.px) document.getElementById("px").value = s.px;
+        frames = fr.map(function (x) { return fit(strToGrid(x)); }); active = 0; buildGrid(); drawThumbs();
+      } catch (err) { alert("Bad JSON: " + err.message); }
+    };
+    rd.readAsText(f);
+  };
+
+  buildGrid(); drawThumbs(); renderPreview(0);
+})();
+</script>
+</body>
+</html>
