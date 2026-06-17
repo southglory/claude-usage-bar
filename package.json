@@ -2,7 +2,7 @@
   "name": "claude-multi-usage",
   "displayName": "Claude Multi-Account Status Bar",
   "description": "Show 5h & 7d usage for multiple Claude accounts (auto-detected, freely labeled) in the status bar — plus per-account terminal launch.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "icon": "icon.png",
   "publisher": "QG-devramyun",
   "author": "southglory",

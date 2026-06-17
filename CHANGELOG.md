@@ -4,10 +4,11 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.6.1] — 2026-06-17
+## [0.6.2] — 2026-06-17
 
 ### Changed
 - Renamed the marketplace **display name** to **Claude Multi-Account Status Bar** (the extension id `claude-multi-usage` is unchanged). No functional changes.
+- Clarified in the README that the Marketplace/Open VSX publisher `QG-devramyun` and the GitHub author `southglory` are the same person.
 
 ## [0.6.0] — 2026-06-17
 
