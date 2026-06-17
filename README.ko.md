@@ -71,8 +71,9 @@
 
 ## 설치
 
-- **마켓플레이스**: **"Claude Multi-Account Usage"** 검색 또는 `ext install QG-devramyun.claude-multi-usage`.
-- **VSIX**: [Releases](https://github.com/southglory/claude-usage-bar/releases) 에서 받아 `code --install-extension claude-multi-usage-0.6.0.vsix`.
+- **VS Code** — [**Marketplace**](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage): **"Claude Multi-Account Status Bar"** 검색 또는 `ext install QG-devramyun.claude-multi-usage`.
+- **Cursor / Windsurf / VSCodium** — [**Open VSX**](https://open-vsx.org/extension/QG-devramyun/claude-multi-usage): 확장 패널에서 같은 이름으로 검색.
+- **VSIX**: [Releases](https://github.com/southglory/claude-usage-bar/releases) 에서 받아 `code --install-extension claude-multi-usage-0.6.2.vsix`.
 - **개발 실행**: 폴더를 열고 `F5`.
 
 ## 설정 (`settings.json`)

@@ -76,8 +76,9 @@ your configured pricing.
 
 ## Install
 
-- **Marketplace**: search **"Claude Multi-Account Usage"**, or `ext install QG-devramyun.claude-multi-usage`.
-- **From VSIX**: download from [Releases](https://github.com/southglory/claude-usage-bar/releases) → `code --install-extension claude-multi-usage-0.6.0.vsix`.
+- **VS Code** — [**Marketplace**](https://marketplace.visualstudio.com/items?itemName=QG-devramyun.claude-multi-usage): search **"Claude Multi-Account Status Bar"**, or `ext install QG-devramyun.claude-multi-usage`.
+- **Cursor / Windsurf / VSCodium** — [**Open VSX**](https://open-vsx.org/extension/QG-devramyun/claude-multi-usage): search the same name in the extensions panel.
+- **From VSIX**: download from [Releases](https://github.com/southglory/claude-usage-bar/releases) → `code --install-extension claude-multi-usage-0.6.2.vsix`.
 - **Dev run**: open this folder and press `F5`.
 
 ## Configure (`settings.json`)
