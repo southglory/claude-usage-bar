@@ -1,5 +1,7 @@
 # Claude Multi-Account Usage
 
+**English** · [한국어](README.ko.md)
+
 > See the **5h / 7d usage of every Claude account at once** in the VS Code status bar — with progress bars, color warnings, a breathing quokka mascot, and a token-cost dashboard.
 
 Most Claude status-bar extensions only track a single `~/.claude`. If you run more
