@@ -210,8 +210,8 @@ function decodeProject(name) {
   return parts.length ? parts.slice(-2).join('-') : String(name);
 }
 
-/** Scan the JSONL session logs under <dir>/projects and aggregate token cost by window,
- *  day and hour. Cost = token counts × pricing — the same method ccusage / long-910
+/** Scan the JSONL session logs under <dir>/projects and aggregate token cost by time
+ *  window, project, day and hour. Cost = token counts × pricing — the same method ccusage / long-910
  *  use. It is the API-equivalent dollar value of the tokens (one price tier for all
  *  models), NOT your real subscription bill. Token counts are exact. Heavy: caller
  *  must throttle/cache. Only files touched within 30 days are read. */
@@ -751,11 +751,12 @@ class Bar {
     };
 
     const noneCard = (s) =>
-      `<details class="card"><summary class="hd">${esc(s.label)} <span class="dim">— no usage yet</span></summary>`
-      + `<div class="meta">No cache and/or no usage logged. Log in, then run a session.</div>`
+      `<div class="card"><div class="chd"><div class="cname">${esc(s.label)}</div>`
+      + `<div class="dim">not signed in</div></div>`
+      + `<div class="meta">Log in once to start tracking this account.</div>`
       + `<div class="btns"><button onclick="post('login',${s.idx})">Log in</button>`
-      + `<button class="sec" onclick="post('launch',${s.idx})">Open terminal</button>`
-      + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></details>`;
+      + `<button class="sec" onclick="post('launch',${s.idx})">Terminal</button>`
+      + `<button class="sec" onclick="post('remove',${s.idx})">Remove</button></div></div>`;
 
     const card = (s) => {
       if (s.none) return noneCard(s);
@@ -768,92 +769,89 @@ class Bar {
         ? Object.entries(cost.byProject).sort((a, b) => b[1].d30 - a[1].d30).slice(0, 8)
           .map(([name, p]) => `<tr><td>${esc(name)}</td><td>${money(p.today)}</td><td>${money(p.d7)}</td><td>${money(p.d30)}</td></tr>`).join('')
         : '';
-      const summary = `${esc(s.label)} <span class="dim">${s.p5 == null ? '?' : s.p5 + '%'} · ${s.p7 == null ? '?' : s.p7 + '%'}`
-        + `${cost ? ' · ' + money(cost.costToday) + ' today' : ''}</span>${s.blocked ? ' <span class="blocked">limit</span>' : ''}`;
 
-      return `<details class="card" open><summary class="hd">${summary}</summary>
+      // Essentials, always visible: name + today's cost, two usage bars, cost tiles.
+      const head = `<div class="chd"><div class="cname">${esc(s.label)}`
+        + `${s.blocked ? ' <span class="blocked">limit</span>' : ''}</div>`
+        + `<div class="ctoday">${cost ? money(cost.costToday) : '—'}<span> today</span></div></div>`;
+      const usage = usageRow('5h', s.p5, s.reset5hAt) + usageRow('7d', s.p7, s.reset7dAt);
+      const tiles = cost
+        ? `<div class="tiles">${tile('5h', money(cost.cost5h))}${tile('Today', money(cost.costToday))}${tile('7 days', money(cost.cost7d))}${tile('Month', money(cost.cost30d))}</div>`
+        : `<div class="meta">${scanning ? 'Scanning session logs…' : 'No session logs yet.'}</div>`;
+      const burnLine = cost
+        ? `<div class="meta">🔥 ${money(burn)}/hr${s.reset5hAt ? ` · 5h limit in ~${esc(remain(s.reset5hAt))}` : ''}${dailyBudget ? ` · ${Math.round((cost.costToday / dailyBudget) * 100)}% of $${dailyBudget}/day` : ''}</div>`
+        : '';
 
-        <div class="sec-h">Current Usage <span class="src">${s.source === 'api' ? 'via API' : 'via cache'}</span></div>
-        ${usageRow('5h', s.p5, s.reset5hAt)}
-        ${usageRow('7d', s.p7, s.reset7dAt)}
-
-        <div class="sec-h">Token Cost <span class="src">est. API value</span></div>
-        ${cost ? `<div class="tiles">${tile('5h', money(cost.cost5h))}${tile('Today', money(cost.costToday))}${tile('7 days', money(cost.cost7d))}${tile('Month (est.)', money(cost.cost30d))}</div>`
-          : `<div class="meta">${scanning ? 'Scanning session logs…' : 'No session logs found.'}</div>`}
-
-        ${cost ? `<details class="sub"><summary>Token breakdown (5h)</summary>
-          <table class="tbl"><tr><th>Type</th><th>Tokens</th><th>Cost</th></tr>
-          <tr><td>Input</td><td>${tok(t.in)}</td><td>${money(t.in * pricing.in / 1e6)}</td></tr>
-          <tr><td>Output</td><td>${tok(t.out)}</td><td>${money(t.out * pricing.out / 1e6)}</td></tr>
-          <tr><td>Cache read</td><td>${tok(t.cr)}</td><td>${money(t.cr * pricing.cr / 1e6)}</td></tr>
-          <tr><td>Cache create</td><td>${tok(t.cc)}</td><td>${money(t.cc * pricing.cc / 1e6)}</td></tr></table>
-        </details>` : ''}
-
-        ${projRows ? `<div class="sec-h">By project</div>
-          <table class="tbl"><tr><th>Project</th><th>Today</th><th>7d</th><th>30d</th></tr>${projRows}</table>` : ''}
-
-        <div class="sec-h">Prediction</div>
-        <div class="meta">Burn rate <b>${money(burn)}/hr</b>${s.reset5hAt ? ` · ⚠ 5h limit resets in ~${esc(remain(s.reset5hAt))} (at ${esc(resetAt(s.reset5hAt))})` : ''}
-          ${dailyBudget && cost ? ` · budget ${money(dailyBudget)}/day — used ${Math.round((cost.costToday / dailyBudget) * 100)}%` : ''}</div>
-
-        ${cost ? `<div class="sec-h">Usage history (30 days)</div>${spark(cost.byDay)}
-          <div class="sec-h">Avg cost by hour</div>${hours(cost.byHour)}` : ''}
-
-        <div class="sec-h">Pricing &amp; settings <span class="src">per 1M tokens</span></div>
+      // Everything else folded behind one Details expander.
+      const details = cost ? `<details class="more"><summary>Details</summary>
+        <table class="tbl"><tr><th>5h tokens</th><th>Count</th><th>Cost</th></tr>
+        <tr><td>Input</td><td>${tok(t.in)}</td><td>${money(t.in * pricing.in / 1e6)}</td></tr>
+        <tr><td>Output</td><td>${tok(t.out)}</td><td>${money(t.out * pricing.out / 1e6)}</td></tr>
+        <tr><td>Cache read</td><td>${tok(t.cr)}</td><td>${money(t.cr * pricing.cr / 1e6)}</td></tr>
+        <tr><td>Cache create</td><td>${tok(t.cc)}</td><td>${money(t.cc * pricing.cc / 1e6)}</td></tr></table>
+        ${projRows ? `<div class="lbl">By project</div><table class="tbl"><tr><th>Project</th><th>Today</th><th>7d</th><th>30d</th></tr>${projRows}</table>` : ''}
+        <div class="lbl">Last 30 days</div>${spark(cost.byDay)}
+        <div class="lbl">Avg cost by hour</div>${hours(cost.byHour)}
+        <div class="lbl">Pricing (per 1M) — <a href="#" onclick="postq('openSettings','@ext:southglory.claude-multi-usage pricing');return false">edit</a></div>
         <div class="meta">in ${money(pricing.in)} · out ${money(pricing.out)} · cache-read ${money(pricing.cr)} · cache-create ${money(pricing.cc)}</div>
+      </details>` : '';
 
-        <div class="btns" style="margin-top:8px">
-          <button onclick="post('launch',${s.idx})">Open terminal</button>
+      return `<div class="card">${head}${usage}${tiles}${burnLine}${details}
+        <div class="btns">
+          <button onclick="post('launch',${s.idx})">Terminal</button>
           <button class="sec" onclick="post('login',${s.idx})">Log in</button>
-          <button class="sec" onclick="post('openCache',${s.idx})">Cache file</button>
-          <button class="sec" onclick="postq('openSettings','@ext:southglory.claude-multi-usage pricing')">Edit pricing</button>
           <button class="sec" onclick="post('remove',${s.idx})">Remove</button>
         </div>
-      </details>`;
+        <div class="src">${s.source === 'api' ? 'via API' : 'via cache'}${s.updatedAt ? ' · ' + esc(new Date(s.updatedAt).toLocaleTimeString()) : ''}</div>
+      </div>`;
     };
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:14px 18px;}
       .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
       h2{margin:0;font-size:16px;}
-      .card{border:1px solid var(--vscode-panel-border);border-radius:10px;padding:10px 14px;margin-bottom:10px;background:var(--vscode-editorWidget-background);}
-      summary.hd{font-weight:700;font-size:13px;cursor:pointer;list-style:revert;}
+      .card{border:1px solid var(--vscode-panel-border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--vscode-editorWidget-background);}
+      .chd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+      .cname{font-weight:700;font-size:14px;}
+      .ctoday{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;}
+      .ctoday span{font-size:11px;font-weight:400;color:var(--vscode-descriptionForeground);}
       .dim{color:var(--vscode-descriptionForeground);font-weight:400;font-size:12px;}
       .blocked{color:var(--vscode-charts-red);font-size:11px;border:1px solid var(--vscode-charts-red);border-radius:6px;padding:1px 6px;}
-      .sec-h{font-weight:600;font-size:12px;margin:12px 0 5px;border-top:1px solid var(--vscode-panel-border);padding-top:8px;}
-      .src{color:var(--vscode-descriptionForeground);font-weight:400;font-size:11px;}
-      .barrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px;}
+      .src{color:var(--vscode-descriptionForeground);font-size:10px;margin-top:8px;text-align:right;}
+      .barrow{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;}
       .lab{width:22px;color:var(--vscode-descriptionForeground);}
       .track{flex:1;height:10px;border-radius:6px;background:var(--vscode-input-background);overflow:hidden;}
       .fill{height:100%;border-radius:6px;transition:width .3s;}
       .pct{width:40px;text-align:right;font-variant-numeric:tabular-nums;}
-      .rst{width:120px;color:var(--vscode-descriptionForeground);font-size:11px;}
-      .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
-      .tile{background:var(--vscode-input-background);border-radius:8px;padding:8px 10px;}
+      .rst{width:110px;color:var(--vscode-descriptionForeground);font-size:11px;}
+      .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 6px;}
+      .tile{background:var(--vscode-input-background);border-radius:8px;padding:8px 10px;text-align:center;}
       .tl{color:var(--vscode-descriptionForeground);font-size:11px;}
       .tv{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
-      .tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;}
+      .tbl{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 8px;}
       .tbl th{text-align:left;color:var(--vscode-descriptionForeground);font-weight:500;border-bottom:1px solid var(--vscode-panel-border);}
       .tbl td,.tbl th{padding:3px 6px;}.tbl td:not(:first-child),.tbl th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;}
-      .sub{margin-top:6px;font-size:12px;}.sub summary{cursor:pointer;color:var(--vscode-descriptionForeground);}
-      .spark{display:flex;align-items:flex-end;gap:2px;height:46px;margin:4px 0;}
+      .more{margin:6px 0;font-size:12px;}.more>summary{cursor:pointer;color:var(--vscode-textLink-foreground);margin-bottom:6px;}
+      .lbl{font-weight:600;font-size:11px;color:var(--vscode-descriptionForeground);margin:10px 0 3px;}
+      .lbl a{color:var(--vscode-textLink-foreground);font-weight:400;}
+      .spark{display:flex;align-items:flex-end;gap:2px;height:42px;margin:3px 0;}
       .sb{flex:1;background:var(--vscode-charts-blue,#4e94ce);border-radius:2px 2px 0 0;min-height:2px;}
-      .meta{color:var(--vscode-descriptionForeground);font-size:12px;margin:4px 0;}
-      .btns{display:flex;gap:6px;flex-wrap:wrap;}
+      .meta{color:var(--vscode-descriptionForeground);font-size:12px;margin:6px 0;}
+      .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
       button{font-family:inherit;font-size:12px;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground);}
       button.sec{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);}
       button:hover{opacity:.88;} .empty{color:var(--vscode-descriptionForeground);margin-bottom:10px;}
-      .add{border:1px dashed var(--vscode-panel-border);border-radius:10px;padding:12px 14px;margin-top:6px;}
+      .add{margin-top:6px;font-size:12px;}.add>summary{cursor:pointer;color:var(--vscode-textLink-foreground);}
       .add .row{display:flex;gap:8px;margin:8px 0;}
       .add input{flex:1;font-family:inherit;font-size:12px;padding:5px 8px;border-radius:6px;
         border:1px solid var(--vscode-input-border,transparent);background:var(--vscode-input-background);color:var(--vscode-input-foreground);}
       .hint{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:6px;}
-      .foot{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:8px;}
+      .foot{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:10px;border-top:1px solid var(--vscode-panel-border);padding-top:8px;}
     </style></head><body>
-      <div class="top"><h2>Claude Code Usage</h2><button onclick="post('refresh')">↻ Refresh</button></div>
+      <div class="top"><h2>Claude Usage</h2><button onclick="post('refresh')">↻ Refresh</button></div>
       ${snap.length ? snap.map(card).join('') : '<div class="empty">No accounts yet — add one below.</div>'}
-      <div class="add">
-        <div class="hd">Add account</div>
+      <details class="add">
+        <summary>+ Add account</summary>
         <div class="row">
           <input id="lab" placeholder="label — e.g. .claude-work" />
           <input id="dir" placeholder="config dir — e.g. ~/.claude-work" />
@@ -862,9 +860,9 @@ class Bar {
           <button onclick="add(true)">Add &amp; log in</button>
           <button class="sec" onclick="add(false)">Add only</button>
         </div>
-        <div class="hint">The label is shown as-is (no parsing). A new directory with no login opens a terminal so you can sign in the first time.</div>
-      </div>
-      <div class="foot">Cost = token counts × pricing (API-equivalent estimate, not your subscription bill). Token counts are exact; logs scanned for the last 30 days.</div>
+        <div class="hint">The label is shown as-is. A new directory with no login opens a terminal to sign in the first time.</div>
+      </details>
+      <div class="foot">Cost = token counts × pricing — an API-equivalent estimate, not your subscription bill. Token counts are exact; the last 30 days of logs are scanned.</div>
       <script>
         const v=acquireVsCodeApi();
         function post(type,idx){v.postMessage({type,idx});}

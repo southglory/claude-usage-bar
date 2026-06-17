@@ -1,19 +1,19 @@
 # Claude Multi-Account Usage
 
-Show the **5-hour / 7-day usage** of *multiple* Claude accounts side by side in the
-VS Code status bar — with progress bars, color thresholds, a breathing quokka
-mascot, a usage dashboard, and one-click per-account terminals.
+> See the **5h / 7d usage of every Claude account at once** in the VS Code status bar — with progress bars, color warnings, a breathing quokka mascot, and a token-cost dashboard.
 
-![status bar](icon.png)
+Most Claude status-bar extensions only track a single `~/.claude`. If you run more
+than one account — a personal and a work login, or any [cc-switch](https://github.com/farion1231/cc-switch)
+`ccp`/`ccw` setup — the others are invisible. **Claude Multi-Account Usage** shows
+them all, side by side, and works even for an account you only ever use in a terminal.
 
----
+**Multiple accounts on one line:**
 
-## Why
+![Multiple Claude accounts in the status bar](images/statusbar.png)
 
-Existing status-bar extensions (`long-kudo.vscode-claude-status`,
-`Roki.claude-token-view`) hard-code `~/.claude` and ignore `CLAUDE_CONFIG_DIR`, so a
-second account like `~/.claude-work` (cc-switch `ccw`) never appears. This extension
-takes a list of accounts and reads each directory, so **N accounts** show on one line.
+**Hover any account for usage, resets, and quick actions:**
+
+![Hover tooltip: usage bars, resets, and Dashboard / Terminal / Cache / Settings](images/tooltip.png)
 
 ## Features
 
@@ -23,7 +23,7 @@ takes a list of accounts and reads each directory, so **N accounts** show on one
 - **Progress bars** — a clean whole-cell bar per account (`██████▒▒ 75% · 36%`); filled `█` and empty `▒` are the same full-cell height, so the bar is a tidy rectangle.
 - **Color thresholds** — green → yellow → red as usage rises; shows a reset countdown when the limit is reached.
 - **Breathing quokka mascot** — a tiny 2-frame pixel quokka that bobs up and down (toggle/replace via settings).
-- **Usage dashboard** — a collapsible per-account panel: current 5h/7d usage, **token-cost estimate** (5h / today / 7d / month) with a 5h token breakdown, per-project costs, burn rate + limit prediction, a 30-day history sparkline, avg cost by hour, and editable pricing. Cost = token counts (read from the session logs) × pricing — an API-equivalent estimate, not your subscription bill.
+- **Usage dashboard** — one clean card per account: today's spend, 5h/7d bars, and **token-cost tiles** (5h / today / 7d / month). A single **Details** expander reveals the 5h token breakdown, per-project costs, a 30-day history sparkline, and avg cost by hour. Cost = token counts (read from the session logs) × pricing — an API-equivalent estimate, not your subscription bill.
 - **Per-account terminal** — open a Claude terminal with that account's `CLAUDE_CONFIG_DIR` injected. No global switching — run several accounts at once.
 - **cc-switch friendly** — set `command: "ccw"` / `"ccp"` to run your existing wrapper as-is.
 
@@ -46,7 +46,7 @@ If an account has neither a cache nor credentials yet, use **Log in** (dashboard
 ## Install
 
 - **Dev run**: open this folder in VS Code and press `F5` (Extension Development Host).
-- **From VSIX**: `code --install-extension southglory.claude-multi-usage-0.4.0.vsix` (or Extensions panel → ⋯ → *Install from VSIX…*).
+- **From VSIX**: `code --install-extension southglory.claude-multi-usage-0.5.0.vsix` (or Extensions panel → ⋯ → *Install from VSIX…*).
 - **Marketplace**: search "Claude Multi-Account Usage" (once published).
 
 ## Configure (`settings.json`)
