@@ -20,7 +20,7 @@ them all, side by side, and works even for an account you only ever use in a ter
 - **N accounts, side by side** — no hard-coded names, no limit.
 - **Auto-detect** — leave the list empty; it finds `.claude*` dirs in your home. Labels show the **folder name as-is** (`.claude`, `.claude-work`) — no parsing, no imposed convention. Rename them to anything you like.
 - **Add & log in from the dashboard** — add a second `.claude-…` account by name and open a terminal to sign in for the first time, all from the panel.
-- **Progress bars** — a clean whole-cell bar per account (`██████▒▒ 75% · 36%`); filled `█` and empty `▒` are the same full-cell height, so the bar is a tidy rectangle.
+- **Progress bars** — a clean, uniform-height bar per account next to the 5h · 7d percentages (see the screenshot above).
 - **Color thresholds** — green → yellow → red as usage rises; shows a reset countdown when the limit is reached.
 - **Breathing quokka mascot** — a tiny 2-frame pixel quokka that bobs up and down (toggle/replace via settings).
 - **Usage dashboard** — one clean card per account: today's spend, 5h/7d bars, and **token-cost tiles** (5h / today / 7d / month). A single **Details** expander reveals the 5h token breakdown, per-project costs, a 30-day history sparkline, and avg cost by hour. Cost = token counts (read from the session logs) × pricing — an API-equivalent estimate, not your subscription bill.
@@ -69,8 +69,8 @@ If an account has neither a cache nor credentials yet, use **Log in** (dashboard
 ```
 
 `dir` expands `~`, `%USERPROFILE%`, `${env:VAR}`. Auto-detect runs only when the list
-is empty. Status bar example: `🦘 .claude ██▒▒▒▒▒▒ 29% · 4%   🦘 .claude-work █▒▒▒▒▒▒▒ 12% · 3%`
-(first % = 5h, second = 7d).
+is empty. Each account shows as `<quokka> <label> <bar> <5h>% · <7d>%` (see the
+status-bar screenshot above) — the first % is the 5h window, the second is 7d.
 
 **Left-click** runs `clickAction` (refresh by default). The hover tooltip has
 clickable **Dashboard · Terminal · Cache · Settings** links — VS Code does not support
