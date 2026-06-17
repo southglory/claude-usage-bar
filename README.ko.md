@@ -135,6 +135,17 @@ uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf
 붙여넣을 `contributes.icons` 블록과 `characterFrames` 값을 출력합니다. `mascot.ttf` 를
 `package.json` 옆에 두고 다시 패키징하세요.
 
+**한 번에(개발용):** 기본 마스코트에 바로 적용하려면 `--apply` 로 실행하세요 — 번들
+`quokka.ttf` 를 덮어쓰므로 재로드(`F5`)/재패키징만으로 반영됩니다(프레임 2개 유지):
+
+```sh
+uv run --with fonttools python tools/build_mascot_font.py mascot.json --apply
+```
+
+> 브라우저 버튼은 *설치된* 확장에 파일을 쓸 수 없고(브라우저 샌드박스 + VS Code 가 아이콘
+> 폰트를 정적으로 로드), 그래서 픽셀 마스코트는 항상 재패키징이 필요합니다. 재빌드 없이
+> 즉시 바꾸려면 `claudeMultiUsage.characterFrames` 에 이모지/코디콘을 넣으세요.
+
 > 픽셀 마스코트는 폰트 번들이 필요합니다. 재패키징 없이 빠르게 바꾸려면
 > `claudeMultiUsage.characterFrames` 에 이모지/코디콘을 넣으세요. 예: `["▃","▆"]`.
 

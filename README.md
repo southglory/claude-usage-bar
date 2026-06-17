@@ -140,6 +140,18 @@ uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf
 It prints the `contributes.icons` block and `characterFrames` value to paste in. Drop
 `mascot.ttf` next to `package.json` and repackage.
 
+**One-step (dev):** to apply straight to the built-in mascot, run with `--apply` — it
+overwrites the bundled `quokka.ttf`, so a reload (`F5`) / repackage shows it with no
+manual edits (keep it 2 frames):
+
+```sh
+uv run --with fonttools python tools/build_mascot_font.py mascot.json --apply
+```
+
+> A browser button can't write into an *installed* extension (browser sandbox + VS Code
+> loads icon fonts statically), so a custom pixel mascot always needs a repackage. For an
+> instant, no-rebuild change, set `claudeMultiUsage.characterFrames` to emojis/codicons.
+
 > Pixel mascots need a bundled font. For a quick change without repackaging, set
 > `claudeMultiUsage.characterFrames` to emojis/codicons, e.g. `["▃","▆"]`.
 

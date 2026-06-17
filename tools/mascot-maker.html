@@ -131,10 +131,14 @@
       <h2 style="margin-top:16px">Then build the font</h2>
       <pre>uv run --with fonttools \
   python tools/build_mascot_font.py \
-  mascot.json mascot.ttf mascot</pre>
+  mascot.json --apply</pre>
       <div class="hint">
-        Prints the <code>contributes.icons</code> block and the <code>characterFrames</code>
-        value to paste in. Drop <code>mascot.ttf</code> next to <code>package.json</code> and repackage.<br><br>
+        <code>--apply</code> overwrites the bundled <code>quokka.ttf</code> (keep 2 frames),
+        so reload (<code>F5</code>) / repackage shows it — no manual edits. Drop the
+        <code>--apply</code> for a custom name + the <code>contributes.icons</code> snippet.<br><br>
+        <b>Why no button here?</b> A browser page can't write into an installed extension,
+        and VS Code loads icon fonts statically — so a pixel mascot always needs a repackage.
+        For an instant change, set <code>characterFrames</code> to emojis/codicons.<br><br>
         <b>Colors are for your design only.</b> The status-bar mascot is a single-color
         font glyph, so every painted pixel becomes a solid silhouette (no holes) — colors
         help you draw, but the glyph takes its color from the VS Code theme.

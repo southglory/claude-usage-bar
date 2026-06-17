@@ -60,11 +60,20 @@ def glyph(frame, cols, rows, px):
 
 
 def main():
-    if len(sys.argv) < 2:
-        raise SystemExit("usage: build_mascot_font.py <frames.json> [out.ttf] [icon-name]")
-    inp = sys.argv[1]
-    out = sys.argv[2] if len(sys.argv) > 2 else "mascot.ttf"
-    icon = sys.argv[3] if len(sys.argv) > 3 else "mascot"
+    argv = [a for a in sys.argv[1:] if not a.startswith("-")]
+    apply = "--apply" in sys.argv
+    if not argv:
+        raise SystemExit("usage: build_mascot_font.py <frames.json> [out.ttf] [icon-name] | --apply")
+    inp = argv[0]
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if apply:
+        # Overwrite the bundled quokka font the extension already references, so a
+        # reload (F5) / repackage shows the new mascot — no snippet pasting.
+        out = os.path.join(repo, "quokka.ttf")
+        icon = "quokka"
+    else:
+        out = argv[1] if len(argv) > 1 else "mascot.ttf"
+        icon = argv[2] if len(argv) > 2 else "mascot"
     spec, frames, cols, rows = load(inp)
     px = int(spec.get("px", 36))
     name = spec.get("name", "Mascot")
@@ -90,6 +99,15 @@ def main():
 
     ttf = os.path.basename(out)
     print(f"\nwrote {out}  ({len(frames)} frame(s), {cols}x{rows}, px={px})\n")
+
+    if apply:
+        if len(frames) == 2:
+            print("Applied to quokka.ttf. Reload VS Code (F5) or repackage to see it —")
+            print("package.json already references quokka-0 / quokka-1, nothing else to change.")
+            return
+        print(f"Applied to quokka.ttf, but you have {len(frames)} frames (default config "
+              "expects 2). Update package.json contributes.icons + characterFrames below:\n")
+
     print("-- package.json contributes.icons --")
     for i in range(len(frames)):
         cp = "%04X" % (0xE001 + i)
@@ -97,7 +115,8 @@ def main():
               f'"default": {{ "fontPath": "{ttf}", "fontCharacter": "\\\\{cp}" }} }},')
     print("\n-- claudeMultiUsage.characterFrames setting --")
     print("  [" + ", ".join(f'"$({icon}-{i})"' for i in range(len(frames))) + "]")
-    print("\n(Drop the .ttf next to package.json, paste the icons block, then set characterFrames.)")
+    if not apply:
+        print("\n(Drop the .ttf next to package.json, paste the icons block, then set characterFrames.)")
 
 
 if __name__ == "__main__":
