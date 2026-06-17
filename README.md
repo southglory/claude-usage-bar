@@ -110,7 +110,11 @@ Opens a per-account terminal without touching global state. Two launch modes:
 
 Don't like the quokka? Draw your own. Open **`tools/mascot-maker.html`** in any
 browser — a pixel editor where you paint each animation frame, onion-skin the
-previous one, and preview the loop. Export `mascot.json`, then build a font:
+previous one, and preview the loop.
+
+![Mascot Maker: pixel editor with frames and live animation preview](images/mascot-maker.png)
+
+Export `mascot.json`, then build a font:
 
 ```sh
 uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf mascot
