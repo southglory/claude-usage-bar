@@ -140,17 +140,26 @@ uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf
 It prints the `contributes.icons` block and `characterFrames` value to paste in. Drop
 `mascot.ttf` next to `package.json` and repackage.
 
-**One-step (dev):** to apply straight to the built-in mascot, run with `--apply` — it
-overwrites the bundled `quokka.ttf`, so a reload (`F5`) / repackage shows it with no
-manual edits (keep it 2 frames):
+**One-step (dev):** apply straight to the built-in mascot with `--apply` (keep it 2 frames):
 
 ```sh
 uv run --with fonttools python tools/build_mascot_font.py mascot.json --apply
 ```
 
-> A browser button can't write into an *installed* extension (browser sandbox + VS Code
-> loads icon fonts statically), so a custom pixel mascot always needs a repackage. For an
-> instant, no-rebuild change, set `claudeMultiUsage.characterFrames` to emojis/codicons.
+`--apply` only overwrites the **source** `quokka.ttf`. For the status bar to actually
+change, the VS Code instance that uses the font has to reload it:
+
+- **Developing (F5 Extension Development Host):** run `--apply`, then reload that window → done.
+- **Your installed extension:** the installed copy has its own `quokka.ttf`, so also repackage + reinstall:
+  ```sh
+  npx @vscode/vsce package && code --install-extension claude-multi-usage-*.vsix --force
+  ```
+  then reload. If the glyph looks cached (same `E001`/`E002` codepoints), fully **restart** VS Code.
+
+> Why no in-editor "Apply" button? A browser page can't write into an installed extension,
+> and VS Code loads icon fonts statically — so a custom pixel mascot always needs a
+> repackage. For an instant, no-rebuild change, set `claudeMultiUsage.characterFrames` to
+> emojis/codicons instead.
 
 > Pixel mascots need a bundled font. For a quick change without repackaging, set
 > `claudeMultiUsage.characterFrames` to emojis/codicons, e.g. `["▃","▆"]`.

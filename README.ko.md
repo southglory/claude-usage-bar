@@ -135,16 +135,26 @@ uv run --with fonttools python tools/build_mascot_font.py mascot.json mascot.ttf
 붙여넣을 `contributes.icons` 블록과 `characterFrames` 값을 출력합니다. `mascot.ttf` 를
 `package.json` 옆에 두고 다시 패키징하세요.
 
-**한 번에(개발용):** 기본 마스코트에 바로 적용하려면 `--apply` 로 실행하세요 — 번들
-`quokka.ttf` 를 덮어쓰므로 재로드(`F5`)/재패키징만으로 반영됩니다(프레임 2개 유지):
+**한 번에(개발용):** 기본 마스코트에 바로 적용하려면 `--apply` 로 실행하세요(프레임 2개 유지):
 
 ```sh
 uv run --with fonttools python tools/build_mascot_font.py mascot.json --apply
 ```
 
-> 브라우저 버튼은 *설치된* 확장에 파일을 쓸 수 없고(브라우저 샌드박스 + VS Code 가 아이콘
-> 폰트를 정적으로 로드), 그래서 픽셀 마스코트는 항상 재패키징이 필요합니다. 재빌드 없이
-> 즉시 바꾸려면 `claudeMultiUsage.characterFrames` 에 이모지/코디콘을 넣으세요.
+`--apply` 는 **소스** `quokka.ttf` 만 덮어씁니다. 상태바가 실제로 바뀌려면 그 폰트를 쓰는
+VS Code 인스턴스가 폰트를 다시 로드해야 합니다:
+
+- **개발(F5 Extension Development Host):** `--apply` 후 그 창을 reload → 끝.
+- **설치된 확장:** 설치본은 자기 `quokka.ttf` 복사본을 갖고 있어서, 재패키징 + 재설치도 필요합니다:
+  ```sh
+  npx @vscode/vsce package && code --install-extension claude-multi-usage-*.vsix --force
+  ```
+  그 후 reload. 글리프가 캐시된 것처럼 안 바뀌면(같은 `E001`/`E002` 코드포인트), VS Code 를 완전히 **재시작**하세요.
+
+> 왜 편집기 안 "Apply" 버튼이 없나요? 브라우저 페이지는 설치된 확장에 파일을 못 쓰고,
+> VS Code 는 아이콘 폰트를 정적으로 로드하기 때문에 픽셀 마스코트는 항상 재패키징이
+> 필요합니다. 재빌드 없이 즉시 바꾸려면 `claudeMultiUsage.characterFrames` 에 이모지/
+> 코디콘을 넣으세요.
 
 > 픽셀 마스코트는 폰트 번들이 필요합니다. 재패키징 없이 빠르게 바꾸려면
 > `claudeMultiUsage.characterFrames` 에 이모지/코디콘을 넣으세요. 예: `["▃","▆"]`.
