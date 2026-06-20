@@ -4,6 +4,11 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-06-20
+
+### Added
+- **Smart Add-account form** — one **Name** field (a leading `.` is added automatically), the **config dir** auto-fills from it with a 📁 native folder picker, and an optional **Shortcut** field. Adding an account now also writes a profile (and optional alias) to [cc-switch](https://github.com/southglory/cc-switch)'s shared `~/.cc-switch/profiles.json`, so a terminal shortcut like `ccw` becomes available once cc-switch is installed. The extension never edits your shell rc files; cc-switch turns the alias into the shell command. (Seeded `ccp`/`ccw` are reserved, so a clashing shortcut is reported and skipped — pick another.)
+
 ## [0.6.4] — 2026-06-18
 
 ### Fixed
@@ -72,6 +77,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.7.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.0
 [0.6.4]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.4
 [0.6.3]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.3
 [0.6.2]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.2
