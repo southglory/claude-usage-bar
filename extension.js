@@ -82,6 +82,11 @@ function readToken(dir) {
   }
 }
 
+/** mtime (ms) of <dir>/.credentials.json, or 0 if missing — used to detect a re-login. */
+function credMtime(dir) {
+  try { return fs.statSync(path.join(dir, CREDS_FILE)).mtimeMs; } catch (e) { return 0; }
+}
+
 const norm01 = (x) => {
   const n = parseFloat(x);
   return isNaN(n) ? null : n > 1 ? n / 100 : n;   // header may be percent (0..100) or fraction
@@ -369,17 +374,28 @@ class Bar {
    *  light: at most once per `minIntervalMs` (default 5 min), and once we already
    *  have a reading we only refetch when the account was actually used within that
    *  window. So when you stop using Claude Code, the API calls stop too. */
-  ensureApiUsage(dir, minIntervalMs) {
+  ensureApiUsage(dir, minIntervalMs, force) {
     const slot = this._api[dir] || (this._api[dir] = {});
-    if (slot.pending) return;
+    if (slot.pending) return;   // a fetch is already in flight — never double-fire
     const now = Date.now();
-    if (slot.ts && now - slot.ts < minIntervalMs) return;            // throttle
-    if (slot.data && !recentlyActive(dir, minIntervalMs)) return;     // idle → don't poll
+    // A re-login rewrites .credentials.json. Detect it so a stale throttle from a
+    // pre-login failed attempt doesn't block the fresh token for up to minIntervalMs.
+    const credTs = credMtime(dir);
+    const credChanged = !!credTs && credTs !== slot.credTs;
+    // Once a rate-limit window has actually reset (day/window rollover), our cached
+    // utilization is stale even while idle.
+    const resetPassed = !!slot.data &&
+      ((slot.data.reset5hAt && now >= slot.data.reset5hAt * 1000) ||
+       (slot.data.reset7dAt && now >= slot.data.reset7dAt * 1000));
+    if (!force) {
+      if (slot.ts && now - slot.ts < minIntervalMs && !credChanged) return;                  // throttle
+      if (slot.data && !recentlyActive(dir, minIntervalMs) && !resetPassed && !credChanged) return; // idle → don't poll
+    }
     slot.pending = true;
     fetchUsageViaApi(dir)
       .then((data) => { slot.data = data; slot.updatedAt = new Date().toISOString(); slot.error = null; })
       .catch((e) => { slot.error = (e && e.message) || String(e); })
-      .finally(() => { slot.pending = false; slot.ts = Date.now(); this.refresh(); });
+      .finally(() => { slot.pending = false; slot.ts = Date.now(); slot.credTs = credMtime(dir); this.refresh(); });
   }
 
   /** Recreate one StatusBarItem per account. */
@@ -561,7 +577,7 @@ class Bar {
     vscode.window.showInformationMessage(`Removed Claude account: ${pick.label}`);
   }
 
-  refresh() {
+  refresh(force) {
     const { accounts, warnAt, critAt, show7d, barLen, showChar, frames, apiFallback, apiMinInterval } = this.config();
     this.showChar = showChar;
     this.frames = frames && frames.length ? frames : FALLBACK_FRAMES.slice();
@@ -584,7 +600,7 @@ class Bar {
       const slot = this._api[dir];
       if (!data && apiFallback) {
         if (slot && slot.data) { data = slot.data; updatedAt = slot.updatedAt; source = 'api'; }
-        if (readToken(dir).token) this.ensureApiUsage(dir, apiMinInterval); // refresh in background (polite)
+        if (readToken(dir).token) this.ensureApiUsage(dir, apiMinInterval, force); // refresh in background (polite)
       }
 
       if (!data) {
@@ -710,14 +726,14 @@ class Bar {
     this.panel.onDidDispose(() => { this.panel = null; });
     this.panel.webview.onDidReceiveMessage((m) => {
       if (!m) return;
-      if (m.type === 'refresh') this.refresh();
+      if (m.type === 'refresh') this.refresh(true);
       else if (m.type === 'launch') this.launch(m.idx);
       else if (m.type === 'login') this.loginAccount(m.idx);
       else if (m.type === 'add') this.addFromDashboard(m.label, m.dir, m.login);
       else if (m.type === 'remove') this.removeByIndex(m.idx);
       else if (m.type === 'openSettings') {
         vscode.commands.executeCommand('workbench.action.openSettings',
-          m.query || '@ext:southglory.claude-multi-usage');
+          m.query || '@ext:QG-devramyun.claude-multi-usage');
       }
       else if (m.type === 'openCache') {
         const f = this.items[m.idx] && this.items[m.idx].__file;
@@ -816,7 +832,7 @@ class Bar {
         ${projRows ? `<div class="lbl">By project</div><table class="tbl"><tr><th>Project</th><th>Today</th><th>7d</th><th>30d</th></tr>${projRows}</table>` : ''}
         <div class="lbl">Last 30 days</div>${spark(cost.byDay)}
         <div class="lbl">Avg cost by hour</div>${hours(cost.byHour)}
-        <div class="lbl">Pricing (per 1M) — <a href="#" onclick="postq('openSettings','@ext:southglory.claude-multi-usage pricing');return false">edit</a></div>
+        <div class="lbl">Pricing (per 1M) — <a href="#" onclick="postq('openSettings','@ext:QG-devramyun.claude-multi-usage pricing');return false">edit</a></div>
         <div class="meta">in ${money(pricing.in)} · out ${money(pricing.out)} · cache-read ${money(pricing.cr)} · cache-create ${money(pricing.cc)}</div>
       </details>` : '';
 
@@ -932,10 +948,10 @@ function activate(context) {
 
   context.subscriptions.push(
     bar,
-    vscode.commands.registerCommand('claudeMultiUsage.refresh', () => bar.refresh()),
+    vscode.commands.registerCommand('claudeMultiUsage.refresh', () => bar.refresh(true)),
     vscode.commands.registerCommand('claudeMultiUsage.openDashboard', () => bar.openDashboard()),
     vscode.commands.registerCommand('claudeMultiUsage.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:southglory.claude-multi-usage')
+      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:QG-devramyun.claude-multi-usage')
     ),
     vscode.commands.registerCommand('claudeMultiUsage.launch', (idx) =>
       typeof idx === 'number' ? bar.launch(idx) : bar.pickAndLaunch()

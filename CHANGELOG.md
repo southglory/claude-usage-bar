@@ -4,6 +4,12 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] — 2026-06-18
+
+### Fixed
+- **Usage now refreshes promptly for API-fallback accounts.** After a re-login the extension detects the rewritten `.credentials.json` and fetches immediately instead of waiting out the throttle (previously up to 5 minutes stale). A manual **Refresh** (status bar or dashboard button) now forces an immediate API fetch, and cached usage is refreshed once a rate-limit window has actually reset (day/window rollover) — all while preserving the polite "at most once per 5 min, stop when idle" polling policy and never double-firing a fetch that is already in flight.
+- **Settings links pointed to the old publisher id.** "Open Settings" and the dashboard's pricing **edit** link used `@ext:southglory.…` and opened an empty filter; corrected to `@ext:QG-devramyun.claude-multi-usage`.
+
 ## [0.6.3] — 2026-06-18
 
 ### Changed
@@ -66,6 +72,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.6.4]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.4
 [0.6.3]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.3
 [0.6.2]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.2
 [0.6.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.0
