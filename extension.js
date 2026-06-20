@@ -12,6 +12,7 @@ const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { dotLabel, ccSwitchUpsert, ccSwitchInstalled } = require('./ccswitch');
 
 const CACHE_FILE = 'vscode-claude-status-cache.json';
 const CREDS_FILE = '.credentials.json';

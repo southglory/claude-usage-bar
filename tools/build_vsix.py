@@ -15,7 +15,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Files shipped inside extension/ (everything users need at runtime).
-FILES = ["package.json", "extension.js", "quokka.ttf", "icon.png", "README.md", "LICENSE"]
+FILES = ["package.json", "extension.js", "ccswitch.js", "quokka.ttf", "icon.png", "README.md", "LICENSE"]
 
 
 def manifest(pkg):
