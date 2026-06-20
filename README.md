@@ -104,10 +104,16 @@ bar items).
 
 ## Add an account & first login
 
-Open the **dashboard** (tooltip → *Dashboard*), expand **+ Add account**, enter a label
-and config dir, then **Add & log in** — it opens a terminal with `CLAUDE_CONFIG_DIR` set
+Open the **dashboard** (tooltip → *Dashboard*), expand **+ Add account**, enter a **name**
+(a leading `.` is added automatically; the config dir auto-fills from it, or pick one with
+the 📁 button), then **Add & log in** — it opens a terminal with `CLAUDE_CONFIG_DIR` set
 and runs `claude`, so a brand-new directory prompts you to sign in. Each card also has
 **Log in**, **Open terminal**, and **Remove**.
+
+Optionally set a **Shortcut** (e.g. `ccw`) — the extension records it in
+[cc-switch](https://github.com/southglory/cc-switch)'s shared registry so you can launch
+that account from any terminal once cc-switch is installed. Leave it empty to skip; the
+status-bar entry and per-account terminal work either way.
 
 ## Account switching (cc-switch built in)
 
