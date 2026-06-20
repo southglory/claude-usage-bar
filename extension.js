@@ -514,13 +514,14 @@ class Bar {
   /** Add an account straight from the dashboard form: free label + dir, optionally
    *  open a terminal for the first login. No name parsing — the label is whatever
    *  the user typed (defaults to the folder name as-is). */
-  async addFromDashboard(label, dir, login) {
-    dir = (dir || '').trim();
-    if (!dir) {
-      vscode.window.showWarningMessage('Enter a config directory (e.g. ~/.claude-work).');
+  async addFromDashboard(name, dir, alias, login) {
+    const label = dotLabel(name);
+    if (!label) {
+      vscode.window.showWarningMessage('Enter an account name (e.g. claude-work).');
       return;
     }
-    label = (label || '').trim() || labelFromDir(dir);
+    dir = (dir || '').trim() || `~/${label}`;
+    alias = (alias || '').trim();
     const cur = this.storedAccounts();
     const exists = cur.some((a) => expandDir(a.dir) === expandDir(dir));
     if (!exists) {
@@ -529,8 +530,20 @@ class Bar {
       this.refresh();
     }
     const idx = this.storedAccounts().findIndex((a) => expandDir(a.dir) === expandDir(dir));
+
+    // Mirror into cc-switch's shared registry so the account gains a terminal shortcut.
+    const key = label.replace(/^\./, '');
+    const res = ccSwitchUpsert({ name: key, dir, alias });
+    let extra = '';
+    if (!res.ok) {
+      extra = ` — shortcut skipped (${res.error})`;
+    } else if (alias) {
+      extra = ccSwitchInstalled()
+        ? ` — shortcut "${alias}" ready (open a new terminal)`
+        : ` — shortcut "${alias}" saved; install cc-switch to use it`;
+    }
     vscode.window.showInformationMessage(
-      `${exists ? 'Account exists' : 'Added account'}: ${label} (${dir})`
+      `${exists ? 'Account exists' : 'Added account'}: ${label} (${dir})${extra}`
     );
     if (login && idx >= 0) this.loginAccount(idx);
   }
@@ -730,7 +743,11 @@ class Bar {
       if (m.type === 'refresh') this.refresh(true);
       else if (m.type === 'launch') this.launch(m.idx);
       else if (m.type === 'login') this.loginAccount(m.idx);
-      else if (m.type === 'add') this.addFromDashboard(m.label, m.dir, m.login);
+      else if (m.type === 'add') this.addFromDashboard(m.name, m.dir, m.alias, m.login);
+      else if (m.type === 'browseDir') {
+        vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Select config dir' })
+          .then((u) => { if (u && u[0]) this.panel.webview.postMessage({ type: 'browsedDir', path: u[0].fsPath }); });
+      }
       else if (m.type === 'remove') this.removeByIndex(m.idx);
       else if (m.type === 'openSettings') {
         vscode.commands.executeCommand('workbench.action.openSettings',
@@ -894,25 +911,47 @@ class Bar {
       <details class="add">
         <summary>+ Add account</summary>
         <div class="row">
-          <input id="lab" placeholder="label — e.g. .claude-work" />
-          <input id="dir" placeholder="config dir — e.g. ~/.claude-work" />
+          <input id="nm" placeholder="name — e.g. claude-work (a '.' is added)" oninput="autodir()" />
+        </div>
+        <div class="row">
+          <input id="dir" placeholder="config dir — auto from name" />
+          <button class="sec" onclick="post('browseDir')">📁</button>
+        </div>
+        <div class="row">
+          <input id="alias" placeholder="shortcut — optional, e.g. ccw" />
         </div>
         <div class="btns">
           <button onclick="add(true)">Add &amp; log in</button>
           <button class="sec" onclick="add(false)">Add only</button>
         </div>
-        <div class="hint">The label is shown as-is. A new directory with no login opens a terminal to sign in the first time.</div>
+        <div class="hint">Name gets a leading "." for the status bar. The shortcut is a cc-switch terminal command (Win/macOS/Linux) — leave empty to skip.</div>
       </details>
       <div class="foot">Cost = token counts × pricing — an API-equivalent estimate, not your subscription bill. Token counts are exact; the last 30 days of logs are scanned.</div>
       <script>
         const v=acquireVsCodeApi();
+        let dirEdited=false;
         function post(type,idx){v.postMessage({type,idx});}
         function postq(type,query){v.postMessage({type,query});}
+        function norm(s){s=(s||'').trim();return s&&s[0]!=='.'?'.'+s:s;}
+        function autodir(){
+          const dir=document.getElementById('dir');
+          if(dirEdited)return;
+          const nm=norm(document.getElementById('nm').value);
+          dir.value=nm?('~/'+nm):'';
+        }
+        document.getElementById('dir').addEventListener('input',()=>{dirEdited=true;});
+        window.addEventListener('message',(e)=>{
+          if(e.data&&e.data.type==='browsedDir'&&e.data.path){
+            document.getElementById('dir').value=e.data.path;dirEdited=true;
+          }
+        });
         function add(login){
-          const lab=document.getElementById('lab').value;
+          const name=document.getElementById('nm').value;
           const dir=document.getElementById('dir').value;
-          v.postMessage({type:'add',label:lab,dir:dir,login:login});
-          document.getElementById('lab').value='';document.getElementById('dir').value='';
+          const alias=document.getElementById('alias').value;
+          v.postMessage({type:'add',name:name,dir:dir,alias:alias,login:login});
+          document.getElementById('nm').value='';document.getElementById('dir').value='';
+          document.getElementById('alias').value='';dirEdited=false;
         }
       </script>
     </body></html>`;
