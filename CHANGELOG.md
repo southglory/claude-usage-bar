@@ -7,7 +7,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.7.0] — 2026-06-20
 
 ### Added
-- **Smart Add-account form** — one **Name** field (a leading `.` is added automatically), the **config dir** auto-fills from it with a 📁 native folder picker, and an optional **Shortcut** field. Adding an account now also writes a profile (and optional alias) to [cc-switch](https://github.com/southglory/cc-switch)'s shared `~/.cc-switch/profiles.json`, so a terminal shortcut like `ccw` becomes available once cc-switch is installed. The extension never edits your shell rc files; cc-switch turns the alias into the shell command. (Seeded `ccp`/`ccw` are reserved, so a clashing shortcut is reported and skipped — pick another.)
+- **Smart Add-account form** — one **Name** field (a leading `.` is added automatically), the **config dir** auto-fills from it with a 📁 native folder picker, and an optional **Shortcut** field. Adding an account now also writes a profile (and optional alias) to [cc-switch](https://github.com/southglory/cc-switch)'s shared `~/.cc-switch/profiles.json`, so a terminal shortcut like `ccw` becomes available once cc-switch is installed. The extension never edits your shell rc files; cc-switch turns the alias into the shell command. (Adding an account whose dir matches an existing cc-switch profile updates that profile instead of duplicating it; a shortcut already taken by a *different* account is reported and skipped.)
 
 ## [0.6.4] — 2026-06-18
 

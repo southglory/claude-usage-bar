@@ -42,22 +42,42 @@ function readCcRegistry() {
   return data;
 }
 
-/** Add/update one profile (+optional alias) in the shared registry. */
+/** Normalize a dir for comparison (expand ~, strip trailing slash, lowercase). */
+function normDir(d) {
+  if (d == null || d === '') return '';
+  let s = String(d).trim();
+  if (s === '~' || s.startsWith('~/') || s.startsWith('~\\')) s = path.join(os.homedir(), s.slice(1));
+  return path.normalize(s).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+/** Add/update one profile (+optional alias) in the shared registry. Keyed by dir:
+ *  if a profile already points at the same dir (e.g. the seeded `work`), reuse it
+ *  instead of creating a duplicate — so a clashing alias on the SAME account just
+ *  updates that profile rather than being rejected. Returns { ok, key?, error? }. */
 function ccSwitchUpsert({ name, dir, alias }) {
   try {
     const data = readCcRegistry();
     data.profiles = data.profiles || {};
+    // Reuse an existing profile pointing at the same dir.
+    let key = name;
+    const want = normDir(dir);
+    if (want) {
+      for (const [k, p] of Object.entries(data.profiles)) {
+        if (p.dir != null && normDir(p.dir) === want) { key = k; break; }
+      }
+    }
     if (alias) {
       if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(alias)) return { ok: false, error: `invalid alias '${alias}'` };
       for (const [k, p] of Object.entries(data.profiles)) {
-        if (p.alias === alias && k !== name) return { ok: false, error: `alias '${alias}' already in use by '${k}'` };
+        if (p.alias === alias && k !== key) return { ok: false, error: `alias '${alias}' already in use by '${k}'` };
       }
     }
-    data.profiles[name] = { dir: dir || `~/.claude-${name}`, alias: alias || null, desc: '' };
+    const prev = data.profiles[key] || {};
+    data.profiles[key] = { dir: dir || prev.dir || `~/.claude-${key}`, alias: alias || prev.alias || null, desc: prev.desc || '' };
     const d = ccSwitchDir();
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
     fs.writeFileSync(path.join(d, 'profiles.json'), JSON.stringify(data, null, 2));
-    return { ok: true };
+    return { ok: true, key };
   } catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
 }
 

@@ -13,21 +13,24 @@ let n = 0; const ok = (c, m) => { console.log((c ? 'ok' : 'NOT OK') + ' - ' + m)
 ok(dotLabel('claude-work') === '.claude-work', 'prepends dot');
 ok(dotLabel('.claude-work') === '.claude-work', 'keeps existing dot');
 
-// upsert creates v2 registry with profile + alias (ccw is seeded for 'work', so use ccwork)
-let r = ccSwitchUpsert({ name: 'claude-work', dir: '~/.claude-work', alias: 'ccwork' });
+// create a NEW profile (dir matches no seed)
+let r = ccSwitchUpsert({ name: 'demo', dir: '~/.claude-demo', alias: 'ccdemo' });
 ok(r.ok, 'upsert ok');
 let reg = readCcRegistry();
 ok(reg.version === 2, 'registry is v2');
-ok(reg.profiles['claude-work'].alias === 'ccwork', 'alias stored');
-ok(reg.profiles['claude-work'].dir === '~/.claude-work', 'dir stored');
+ok(reg.profiles['demo'].alias === 'ccdemo', 'alias stored');
+ok(reg.profiles['demo'].dir === '~/.claude-demo', 'dir stored');
 
-// duplicate alias rejected
-r = ccSwitchUpsert({ name: 'other', dir: '~/.claude-other', alias: 'ccwork' });
-ok(!r.ok && /in use|already/.test(r.error || ''), 'duplicate alias rejected');
+// dir-reuse: adding the seeded work dir reuses 'work' (no duplicate, no phantom clash)
+r = ccSwitchUpsert({ name: 'claude-work', dir: '~/.claude-work', alias: 'ccw' });
+ok(r.ok && r.key === 'work', 'same dir reuses seeded profile');
+reg = readCcRegistry();
+ok(!reg.profiles['claude-work'], 'no duplicate profile for the same dir');
+ok(reg.profiles['work'].alias === 'ccw', 'reused profile keeps/sets the alias');
 
-// alias collides with a seeded default (work→ccw) → also rejected, with a clear owner
-r = ccSwitchUpsert({ name: 'mywork', dir: '~/.claude-mywork', alias: 'ccw' });
-ok(!r.ok && /work/.test(r.error || ''), 'seeded-default alias collision reported');
+// duplicate alias across DIFFERENT dirs is still rejected
+r = ccSwitchUpsert({ name: 'other', dir: '~/.claude-other', alias: 'ccdemo' });
+ok(!r.ok && /in use|already/.test(r.error || ''), 'duplicate alias across dirs rejected');
 
 // migration: hand-write a v1 file, then upsert must migrate
 fs.writeFileSync(path.join(process.env.CC_SWITCH_HOME, 'profiles.json'),
