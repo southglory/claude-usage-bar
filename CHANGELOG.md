@@ -4,6 +4,11 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] — 2026-06-21
+
+### Changed
+- Docs: clarified the **Set up cc-switch** prompt in the README (cc-switch isn't installed → button to its installer; already installed → re-run once). No functional change over 0.7.1.
+
 ## [0.7.1] — 2026-06-21
 
 ### Fixed
@@ -82,6 +87,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.7.2]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.2
 [0.7.1]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.1
 [0.7.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.0
 [0.6.4]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.4
