@@ -112,8 +112,10 @@ and runs `claude`, so a brand-new directory prompts you to sign in. Each card al
 
 Optionally set a **Shortcut** (e.g. `ccw`) — the extension records it in
 [cc-switch](https://github.com/southglory/cc-switch)'s shared registry so you can launch
-that account from any terminal once cc-switch is installed. Leave it empty to skip; the
-status-bar entry and per-account terminal work either way.
+that account from any terminal. If cc-switch isn't installed yet, you'll get a **Set up
+cc-switch** button that opens its installer (already installed? re-run it once so the
+extension can detect it). Leave the shortcut empty to skip; the status-bar entry and
+per-account terminal work either way.
 
 ## Account switching (cc-switch built in)
 
