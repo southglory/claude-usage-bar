@@ -4,6 +4,11 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] — 2026-06-21
+
+### Fixed
+- **Accurate "cc-switch installed" detection.** The shortcut feature previously reported "ready" even when [cc-switch](https://github.com/southglory/cc-switch) wasn't installed (it checked for the `~/.cc-switch` dir, which the extension creates itself). It now checks for cc-switch's install marker (`installed.json`) or the POSIX `cc-switch.sh`. When you set a shortcut without cc-switch installed, a **Set up cc-switch** button opens the install guide (already installed? re-run its installer once to register the marker).
+
 ## [0.7.0] — 2026-06-20
 
 ### Added
@@ -77,6 +82,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial release: show 5h / 7d usage for multiple Claude accounts side by side in the VS Code status bar, reading each config dir's `vscode-claude-status-cache.json`, with per-account terminal launch and cc-switch (`ccp`/`ccw`) support.
 
+[0.7.1]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.1
 [0.7.0]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.7.0
 [0.6.4]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.4
 [0.6.3]: https://github.com/southglory/claude-usage-bar/releases/tag/v0.6.3

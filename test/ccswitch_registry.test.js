@@ -5,7 +5,7 @@ const path = require('path');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ccsw-'));
 process.env.CC_SWITCH_HOME = path.join(tmp, '.cc-switch');
-const { dotLabel, ccSwitchUpsert, readCcRegistry } = require('../ccswitch.js');
+const { dotLabel, ccSwitchUpsert, readCcRegistry, ccSwitchInstalled } = require('../ccswitch.js');
 
 let n = 0; const ok = (c, m) => { console.log((c ? 'ok' : 'NOT OK') + ' - ' + m); if (!c) process.exitCode = 1; n++; };
 
@@ -41,6 +41,18 @@ ok(reg.version === 2, 'migrated to v2');
 ok(reg.profiles['personal'].alias === 'ccp' && reg.profiles['work'].alias === 'ccw', 'defaults backfilled');
 ok(fs.existsSync(path.join(process.env.CC_SWITCH_HOME, 'profiles.json.bak')), 'backup written');
 ok(reg.profiles['team'].alias === 'cct', 'new profile added during migration');
+
+// --- install detection: must NOT false-positive on the registry the extension wrote ---
+const home2 = path.join(tmp, 'home2');
+process.env.CC_SWITCH_HOME = path.join(home2, '.cc-switch');
+fs.mkdirSync(process.env.CC_SWITCH_HOME, { recursive: true });
+fs.writeFileSync(path.join(process.env.CC_SWITCH_HOME, 'profiles.json'), '{"version":2,"default":"personal","profiles":{}}');
+ok(ccSwitchInstalled() === false, 'not installed when only profiles.json exists');
+fs.writeFileSync(path.join(process.env.CC_SWITCH_HOME, 'installed.json'), '{"tool":"cc-switch","version":"0.2.0","platform":"windows"}');
+ok(ccSwitchInstalled() === true, 'installed when marker present');
+fs.rmSync(path.join(process.env.CC_SWITCH_HOME, 'installed.json'));
+fs.writeFileSync(path.join(process.env.CC_SWITCH_HOME, 'cc-switch.sh'), '# stub');
+ok(ccSwitchInstalled() === true, 'installed when POSIX cc-switch.sh present');
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${n} assertions`);

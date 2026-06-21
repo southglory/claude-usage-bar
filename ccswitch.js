@@ -16,10 +16,14 @@ function ccSwitchDir() {
   return process.env.CC_SWITCH_HOME || path.join(os.homedir(), '.cc-switch');
 }
 
-/** True if cc-switch looks installed (dir or POSIX script present). */
+/** True only if the cc-switch *tool* is actually installed — its installer writes
+ *  an `installed.json` marker; the POSIX install also copies `cc-switch.sh` here.
+ *  (The registry dir alone means nothing — the extension creates it itself.) */
 function ccSwitchInstalled() {
   try {
-    return fs.existsSync(ccSwitchDir()) || fs.existsSync(path.join(ccSwitchDir(), 'cc-switch.sh'));
+    const d = ccSwitchDir();
+    return fs.existsSync(path.join(d, 'installed.json'))
+        || fs.existsSync(path.join(d, 'cc-switch.sh'));
   } catch (e) { return false; }
 }
 
