@@ -534,17 +534,22 @@ class Bar {
     // Mirror into cc-switch's shared registry so the account gains a terminal shortcut.
     const key = label.replace(/^\./, '');
     const res = ccSwitchUpsert({ name: key, dir, alias });
-    let extra = '';
-    if (!res.ok) {
-      extra = ` — shortcut skipped (${res.error})`;
+    const base = `${exists ? 'Account exists' : 'Added account'}: ${label} (${dir})`;
+    if (alias && !res.ok) {
+      vscode.window.showWarningMessage(`${base} — shortcut skipped (${res.error})`);
+    } else if (alias && !ccSwitchInstalled()) {
+      const SETUP = 'Set up cc-switch';
+      vscode.window.showInformationMessage(
+        `${base} — shortcut "${alias}" saved. Install cc-switch to use it in a terminal (already installed? re-run its installer once).`,
+        SETUP
+      ).then((pick) => {
+        if (pick === SETUP) vscode.env.openExternal(vscode.Uri.parse('https://github.com/southglory/cc-switch#install'));
+      });
     } else if (alias) {
-      extra = ccSwitchInstalled()
-        ? ` — shortcut "${alias}" ready (open a new terminal)`
-        : ` — shortcut "${alias}" saved; install cc-switch to use it`;
+      vscode.window.showInformationMessage(`${base} — shortcut "${alias}" ready (open a new terminal)`);
+    } else {
+      vscode.window.showInformationMessage(base);
     }
-    vscode.window.showInformationMessage(
-      `${exists ? 'Account exists' : 'Added account'}: ${label} (${dir})${extra}`
-    );
     if (login && idx >= 0) this.loginAccount(idx);
   }
 
