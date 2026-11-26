@@ -74,6 +74,44 @@
           "type": "number", "default": 300, "minimum": 60,
           "markdownDescription": "Minimum seconds between API usage fetches per account (default 5 min). After the first reading, the API is only called again when that account was actually used within this window — so when you stop using Claude Code, the calls stop. Only applies when `fetchUsageViaApi` is on."
         },
+        "claudeMultiUsage.theme": {
+          "type": "string",
+          "enum": ["default", "compact", "micro"],
+          "default": "default",
+          "markdownEnumDescriptions": [
+            "Quokka + progress bar: `.claude ██████▒▒ 52% · 36%` (the original look)",
+            "Quokka + pie glyphs: `.claude ◑ 52% · ◔ 36%`",
+            "No icon: `.claude 🟢🟡 $(clock)$(clock)` — a color dot for the 5-hour and weekly usage, then a 5-hour and a weekly clock that turn green/yellow/red by time-to-reset once that window hits its limit"
+          ],
+          "markdownDescription": "Status bar preset. `icon` and `usageStyle` (when not `auto`) override the preset's choice. In **micro**, the clocks keep the normal text color until a window hits its limit, then show how soon it resets: green when ≤ 25% of that window is left, yellow ≤ 60%, red otherwise (if both windows are maxed, the more urgent color). Hover for exact percentages and reset times."
+        },
+        "claudeMultiUsage.icon": {
+          "type": "string",
+          "enum": ["auto", "quokka", "sparkle", "pulse", "robot", "dashboard", "none"],
+          "default": "auto",
+          "markdownEnumDescriptions": [
+            "Use the theme's icon (quokka for default/compact, none for micro)",
+            "Breathing pixel quokka (uses `characterFrames`)",
+            "$(sparkle) codicon",
+            "$(pulse) codicon",
+            "$(hubot) codicon",
+            "$(dashboard) codicon",
+            "No icon"
+          ],
+          "description": "Icon shown before each account. `showCharacter: false` still hides it."
+        },
+        "claudeMultiUsage.usageStyle": {
+          "type": "string",
+          "enum": ["auto", "progressBar", "pieChart", "dot"],
+          "default": "auto",
+          "markdownEnumDescriptions": [
+            "Use the theme's style",
+            "Progress bar for the 5-hour window, percentage for weekly",
+            "A pie glyph (○ ◔ ◑ ◕ ●) for each of the 5-hour and weekly windows",
+            "Two color dots (🟢🟡🔴) for the 5-hour and weekly usage, plus two reset clocks"
+          ],
+          "description": "How 5-hour and weekly usage are drawn in the status bar."
+        },
         "claudeMultiUsage.showCharacter": {
           "type": "boolean", "default": true,
           "description": "Show the breathing quokka mascot before each account"
