@@ -2,7 +2,8 @@
 // Per account, usage comes from one of two sources, in order:
 //   1) <config dir>/vscode-claude-status-cache.json — the cache the Claude Code
 //      VS Code integration writes, but ONLY for the one account it polls.
-//   2) the Anthropic API — read <config dir>/.credentials.json's OAuth token and
+//   2) the Anthropic API — read the account's OAuth token (<config dir>/.credentials.json,
+//      or the macOS Keychain entry Claude Code writes there instead — see credentials.js) and
 //      GET the rate-limit response headers (the method long-kudo.vscode-claude-status
 //      uses). This works for ANY account, including ones used only in a terminal.
 'use strict';
@@ -13,9 +14,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { dotLabel, ccSwitchUpsert, ccSwitchInstalled } = require('./ccswitch');
+const { CREDS_FILE, readToken, credStamp, invalidateCreds } = require('./credentials');
 
 const CACHE_FILE = 'vscode-claude-status-cache.json';
-const CREDS_FILE = '.credentials.json';
 const CFG = 'claudeMultiUsage';
 const FALLBACK_FRAMES = ['$(quokka-0)', '$(quokka-1)'];
 
@@ -72,22 +73,6 @@ function readUsage(dir) {
   }
 }
 
-/** Read <dir>/.credentials.json -> { token, expiresAt } (claudeAiOauth.accessToken). */
-function readToken(dir) {
-  try {
-    const j = JSON.parse(fs.readFileSync(path.join(dir, CREDS_FILE), 'utf8'));
-    const o = j.claudeAiOauth || j;
-    return { token: o.accessToken || o.access_token || null, expiresAt: o.expiresAt || null };
-  } catch (e) {
-    return { token: null, expiresAt: null };
-  }
-}
-
-/** mtime (ms) of <dir>/.credentials.json, or 0 if missing — used to detect a re-login. */
-function credMtime(dir) {
-  try { return fs.statSync(path.join(dir, CREDS_FILE)).mtimeMs; } catch (e) { return 0; }
-}
-
 const norm01 = (x) => {
   const n = parseFloat(x);
   return isNaN(n) ? null : n > 1 ? n / 100 : n;   // header may be percent (0..100) or fraction
@@ -134,7 +119,10 @@ function fetchUsageViaApi(dir) {
         res.on('end', () => {
           const u5 = h['anthropic-ratelimit-unified-5h-utilization'];
           const u7 = h['anthropic-ratelimit-unified-7d-utilization'];
-          if (u5 == null && u7 == null) return reject(new Error('http-' + res.statusCode));
+          if (u5 == null && u7 == null) {
+            if (res.statusCode === 401) invalidateCreds(dir); // re-read a refreshed Keychain token next time
+            return reject(new Error('http-' + res.statusCode));
+          }
           resolve({
             utilization5h: norm01(u5),
             utilization7d: norm01(u7),
@@ -379,9 +367,9 @@ class Bar {
     const slot = this._api[dir] || (this._api[dir] = {});
     if (slot.pending) return;   // a fetch is already in flight — never double-fire
     const now = Date.now();
-    // A re-login rewrites .credentials.json. Detect it so a stale throttle from a
+    // A re-login rewrites .credentials.json (or the Keychain entry). Detect it so a stale throttle from a
     // pre-login failed attempt doesn't block the fresh token for up to minIntervalMs.
-    const credTs = credMtime(dir);
+    const credTs = credStamp(dir);
     const credChanged = !!credTs && credTs !== slot.credTs;
     // Once a rate-limit window has actually reset (day/window rollover), our cached
     // utilization is stale even while idle.
@@ -396,7 +384,7 @@ class Bar {
     fetchUsageViaApi(dir)
       .then((data) => { slot.data = data; slot.updatedAt = new Date().toISOString(); slot.error = null; })
       .catch((e) => { slot.error = (e && e.message) || String(e); })
-      .finally(() => { slot.pending = false; slot.ts = Date.now(); slot.credTs = credMtime(dir); this.refresh(); });
+      .finally(() => { slot.pending = false; slot.ts = Date.now(); slot.credTs = credStamp(dir); this.refresh(); });
   }
 
   /** Recreate one StatusBarItem per account. */
@@ -638,7 +626,9 @@ class Bar {
             ? `API fetch failed: \`${slot.error}\` (token may be expired — log in again).\n\n`
             : `Fetching usage from the API…\n\n`);
         } else if (apiFallback && !hasCreds) {
-          md.appendMarkdown(`No \`${CREDS_FILE}\` in this dir — **Log in** to create it.\n\n`);
+          md.appendMarkdown(process.platform === 'darwin'
+            ? `No \`${CREDS_FILE}\` in this dir and no macOS Keychain login for it — **Log in** to create one.\n\n`
+            : `No \`${CREDS_FILE}\` in this dir — **Log in** to create it.\n\n`);
         } else {
           md.appendMarkdown(error === 'ENOENT'
             ? `No cache file; enable \`fetchUsageViaApi\` or run a session.\n\n`

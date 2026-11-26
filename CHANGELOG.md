@@ -4,6 +4,11 @@ All notable changes to **Claude Multi-Account Usage** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **macOS: usage was blank for every terminal-login account.** On macOS Claude Code stores its OAuth token in the login Keychain, not in `<config dir>/.credentials.json`, so the API fallback found no token and showed `—`. The token is now read from the Keychain (`Claude Code-credentials-<sha256(config dir)[:8]>`, or `Claude Code-credentials` for the default `~/.claude`) via the system `security` tool when no `.credentials.json` exists. Reads are cached for 60 s, a 401 drops the cache so a refreshed token is picked up, and a re-login is still detected (by a token fingerprint, never the token itself). Linux/Windows behavior is unchanged.
+
 ## [0.7.2] — 2026-06-21
 
 ### Changed

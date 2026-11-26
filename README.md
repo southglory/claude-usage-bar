@@ -67,7 +67,7 @@ per-token rates (defaults: Claude Sonnet 4.x pricing).
 Per account, usage comes from one of two sources (in order):
 
 1. **Cache file** — `<CLAUDE_CONFIG_DIR>/vscode-claude-status-cache.json`, written by Claude Code's VS Code integration. Free to read, but written for the **one** account VS Code polls — a terminal-only account never gets one.
-2. **API fallback** (`fetchUsageViaApi`, on by default) — read the account's `.credentials.json` OAuth token and fetch usage from `api.anthropic.com` via the rate-limit response headers (see the Note above for cost/cadence).
+2. **API fallback** (`fetchUsageViaApi`, on by default) — read the account's OAuth token (from `.credentials.json`, or on **macOS** from the login Keychain, where Claude Code stores it instead — service `Claude Code-credentials-<hash>` per config dir) and fetch usage from `api.anthropic.com` via the rate-limit response headers (see the Note above for cost/cadence).
 
 Token cost is computed by scanning `projects/**` session logs for exact token counts ×
 your configured pricing.
@@ -177,13 +177,15 @@ change, the VS Code instance that uses the font has to reload it:
 
 ## Privacy & why it's open source
 
-This extension reads sensitive local files — your accounts' `.credentials.json` OAuth
-tokens — to fetch usage. Because of that, it's **fully open source on purpose**: read
+This extension reads sensitive local credentials — your accounts' OAuth tokens from
+`.credentials.json`, or on macOS from the Keychain entries Claude Code creates (read with the
+system `security` tool) — to fetch usage. Because of that, it's **fully open source on purpose**: read
 the code, don't take my word for it.
 
 - **Your tokens never leave your machine** except to call **`api.anthropic.com`** directly (the endpoint Claude Code uses), only to read your own usage. **No third-party server, no telemetry, no analytics.**
 - The API fallback is **opt-out** (`fetchUsageViaApi: false`) and rate-limited (see the Note).
 - All it reads under each config dir: `vscode-claude-status-cache.json`, `.credentials.json`, and `projects/**` token counts.
+- On macOS, the only Keychain items it reads are Claude Code's own `Claude Code-credentials*` entries for the configured accounts. It never writes to the Keychain.
 
 ## Contributing
 
